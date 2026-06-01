@@ -107,6 +107,10 @@ button {
   gap: 8px;
 }
 
+.actions.single-action {
+  justify-content: center;
+}
+
 .actions button,
 .break-actions button {
   padding: 8px 12px;
@@ -233,12 +237,12 @@ button {
 }
 
 .mode-break.strict .break-screen {
-  background: radial-gradient(circle at 50% 35%, rgba(255, 255, 255, 0.78), rgba(15, 23, 42, 0.32));
-  backdrop-filter: blur(2px);
+  background: radial-gradient(circle at 50% 35%, rgba(255, 255, 255, 0.42), rgba(15, 23, 42, 0.22));
+  backdrop-filter: blur(1.5px);
 }
 
 .mode-break.gentle .break-screen {
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.1);
 }
 
 .break-message {
@@ -251,10 +255,10 @@ button {
   padding: 28px;
   border-radius: 34px;
   text-align: center;
-  background: rgba(255, 255, 255, 0.9);
-  border: 1px solid rgba(148, 163, 184, 0.35);
-  box-shadow: 0 24px 100px rgba(15, 23, 42, 0.28);
-  backdrop-filter: blur(18px);
+  background: rgba(255, 255, 255, 0.68);
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  box-shadow: 0 24px 100px rgba(15, 23, 42, 0.2);
+  backdrop-filter: blur(10px);
 }
 
 .message-pet {
@@ -274,6 +278,15 @@ button {
   line-height: 1.7;
 }
 
+.shortcut-note {
+  display: inline-block;
+  padding: 7px 12px;
+  border-radius: 999px;
+  background: rgba(254, 226, 226, 0.76);
+  color: #991b1b !important;
+  font-weight: 800;
+}
+
 .countdown {
   display: block;
   font-variant-numeric: tabular-nums;
@@ -287,12 +300,6 @@ button {
   justify-content: center;
   gap: 10px;
   flex-wrap: wrap;
-}
-
-.break-message small {
-  display: block;
-  margin-top: 12px;
-  color: #64748b;
 }
 
 .pet-cloud {
