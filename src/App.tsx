@@ -21,18 +21,60 @@ function isTauriRuntime() {
   return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 }
 
+function randomDigit(previous?: string) {
+  const digits = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
+  const candidates = previous ? digits.filter((digit) => digit !== previous) : digits;
+  return candidates[Math.floor(Math.random() * candidates.length)];
+}
+
+async function playBreakChime() {
+  try {
+    const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!AudioContextClass) return;
+
+    const context = new AudioContextClass();
+    const now = context.currentTime;
+    const master = context.createGain();
+    master.gain.setValueAtTime(0.0001, now);
+    master.gain.exponentialRampToValueAtTime(0.16, now + 0.03);
+    master.gain.exponentialRampToValueAtTime(0.0001, now + 0.78);
+    master.connect(context.destination);
+
+    [660, 880, 1175].forEach((frequency, index) => {
+      const oscillator = context.createOscillator();
+      const gain = context.createGain();
+      const start = now + index * 0.16;
+      const stop = start + 0.18;
+      oscillator.type = 'sine';
+      oscillator.frequency.setValueAtTime(frequency, start);
+      gain.gain.setValueAtTime(0.0001, start);
+      gain.gain.exponentialRampToValueAtTime(0.22, start + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, stop);
+      oscillator.connect(gain).connect(master);
+      oscillator.start(start);
+      oscillator.stop(stop + 0.02);
+    });
+
+    window.setTimeout(() => {
+      void context.close();
+    }, 1000);
+  } catch (error) {
+    console.warn('Break chime failed:', error);
+  }
+}
+
 export default function App() {
   const [settings, setSettingsState] = useState<DeskPetSettings>(() => loadSettings());
   const [mode, setMode] = useState<PetMode>('idle');
-  const [paused, setPaused] = useState(false);
   const [panelOpen, setPanelOpen] = useState(false);
   const [phaseEnd, setPhaseEnd] = useState(() => Date.now() + DEFAULT_SETTINGS.focusMinutes * 60_000);
   const [remainingSeconds, setRemainingSeconds] = useState(() => secondsUntil(phaseEnd));
   const [salt, setSalt] = useState(() => Math.floor(Math.random() * 10_000));
+  const [exitDigit, setExitDigit] = useState(() => randomDigit());
   const modeRef = useRef<PetMode>(mode);
-  const pausedRef = useRef(paused);
   const settingsRef = useRef(settings);
   const phaseEndRef = useRef(phaseEnd);
+  const exitDigitRef = useRef(exitDigit);
 
   const pets = useMemo(
     () => createPetSeeds(settings.breakPetCount, salt),
@@ -44,10 +86,6 @@ export default function App() {
   }, [mode]);
 
   useEffect(() => {
-    pausedRef.current = paused;
-  }, [paused]);
-
-  useEffect(() => {
     settingsRef.current = settings;
     saveSettings(settings);
   }, [settings]);
@@ -55,6 +93,10 @@ export default function App() {
   useEffect(() => {
     phaseEndRef.current = phaseEnd;
   }, [phaseEnd]);
+
+  useEffect(() => {
+    exitDigitRef.current = exitDigit;
+  }, [exitDigit]);
 
   const applyWindowMode = useCallback(async (nextMode: PetMode, settingsPanelOpen = panelOpen) => {
     if (!isTauriRuntime()) return;
@@ -96,16 +138,21 @@ export default function App() {
 
   const startBreak = useCallback((minutes = settingsRef.current.breakMinutes) => {
     setMode('break');
-    setPaused(false);
     setPhaseEnd(Date.now() + minutes * 60_000);
+    setExitDigit((current) => randomDigit(current));
+    setSalt((value) => value + 1);
+    setPanelOpen(false);
+    void applyWindowMode('break', false);
+    void playBreakChime();
+  }, [applyWindowMode]);
+
+  const extendBreak = useCallback((minutes: number) => {
+    setMode('break');
+    setPhaseEnd((currentEnd) => Math.max(currentEnd, Date.now()) + minutes * 60_000);
     setSalt((value) => value + 1);
     setPanelOpen(false);
     void applyWindowMode('break', false);
   }, [applyWindowMode]);
-
-  const togglePause = useCallback(() => {
-    setPaused((value) => !value);
-  }, []);
 
   useEffect(() => {
     const init = async () => {
@@ -128,13 +175,7 @@ export default function App() {
       const now = new Date();
       const currentSettings = settingsRef.current;
       const currentMode = modeRef.current;
-      const currentPaused = pausedRef.current;
       const insideWork = isInsideWorkWindow(now, currentSettings);
-
-      if (currentPaused) {
-        setRemainingSeconds(secondsUntil(phaseEndRef.current));
-        return;
-      }
 
       if (!insideWork && currentMode !== 'break') {
         if (currentMode !== 'idle') {
@@ -173,12 +214,8 @@ export default function App() {
         case 'break-now':
           startBreak();
           break;
-        case 'back-to-work':
-          setPaused(false);
-          startWork();
-          break;
-        case 'toggle-pause':
-          togglePause();
+        case 'extend-break-1':
+          extendBreak(1);
           break;
         case 'toggle-settings':
           setPanelOpen((open) => {
@@ -193,11 +230,12 @@ export default function App() {
     return () => {
       void unlistenPromise.then((unlisten) => unlisten());
     };
-  }, [applyWindowMode, startBreak, startWork, togglePause]);
+  }, [applyWindowMode, extendBreak, startBreak]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && settingsRef.current.allowEscExit && modeRef.current === 'break') {
+      if (event.repeat) return;
+      if (settingsRef.current.allowEscExit && modeRef.current === 'break' && event.key === exitDigitRef.current) {
         startWork();
       }
     };
@@ -234,9 +272,7 @@ export default function App() {
   const statusText = mode === 'break'
     ? '休息模式'
     : mode === 'work'
-      ? paused
-        ? '已暂停提醒'
-        : '工作陪伴中'
+      ? '工作陪伴中'
       : '非工作时段';
 
   return (
@@ -245,20 +281,19 @@ export default function App() {
         <BreakScreen
           pets={pets}
           remainingSeconds={remainingSeconds}
-          onBackToWork={startWork}
-          onExtend={() => startBreak(5)}
-          allowEscExit={settings.allowEscExit}
+          exitDigit={exitDigit}
+          allowShortcutExit={settings.allowEscExit}
+          onExtendOne={() => extendBreak(1)}
+          onExtendFive={() => extendBreak(5)}
         />
       ) : (
         <CompanionPanel
           mode={mode}
-          paused={paused}
           statusText={statusText}
           remainingSeconds={remainingSeconds}
           panelOpen={panelOpen}
           settings={settings}
           onStartBreak={() => startBreak()}
-          onTogglePause={togglePause}
           onTogglePanel={() => {
             const next = !panelOpen;
             setPanelOpen(next);
@@ -279,13 +314,11 @@ export default function App() {
 
 function CompanionPanel(props: {
   mode: PetMode;
-  paused: boolean;
   statusText: string;
   remainingSeconds: number;
   panelOpen: boolean;
   settings: DeskPetSettings;
   onStartBreak: () => void;
-  onTogglePause: () => void;
   onTogglePanel: () => void;
   onStartDrag: () => void;
   onToggleAutoStart: () => void;
@@ -313,9 +346,8 @@ function CompanionPanel(props: {
                 : '休息中'}
           </span>
         </div>
-        <div className="actions">
+        <div className="actions single-action">
           <button onClick={props.onStartBreak}>立即休息</button>
-          <button onClick={props.onTogglePause}>{props.paused ? '恢复' : '暂停'}</button>
         </div>
       </div>
 
@@ -365,7 +397,7 @@ function CompanionPanel(props: {
             <span>休息桌宠数量：{props.settings.breakPetCount}</span>
             <input
               type="range"
-              min={1}
+              min={60}
               max={200}
               value={props.settings.breakPetCount}
               onChange={(event) => props.onUpdateSettings({ breakPetCount: Number(event.currentTarget.value) })}
@@ -392,7 +424,7 @@ function CompanionPanel(props: {
               onChange={() => props.onUpdateSettings({ strictBreakOverlay: !props.settings.strictBreakOverlay })}
             />
             <SwitchRow
-              label="Esc 退出休息模式"
+              label="数字键退出休息模式"
               checked={props.settings.allowEscExit}
               onChange={() => props.onUpdateSettings({ allowEscExit: !props.settings.allowEscExit })}
             />
@@ -406,9 +438,10 @@ function CompanionPanel(props: {
 function BreakScreen(props: {
   pets: ReturnType<typeof createPetSeeds>;
   remainingSeconds: number;
-  onBackToWork: () => void;
-  onExtend: () => void;
-  allowEscExit: boolean;
+  exitDigit: string;
+  allowShortcutExit: boolean;
+  onExtendOne: () => void;
+  onExtendFive: () => void;
 }) {
   return (
     <section className="break-screen">
@@ -416,12 +449,14 @@ function BreakScreen(props: {
         <div className="message-pet">🐱</div>
         <h1>休息时间到！</h1>
         <p>站起来走一走，看看远处，喝口水。桌宠们会陪你休息。</p>
+        {props.allowShortcutExit && (
+          <p className="shortcut-note">本轮返回工作快捷键：数字 {props.exitDigit}</p>
+        )}
         <strong className="countdown">{formatDuration(props.remainingSeconds)}</strong>
         <div className="break-actions">
-          <button onClick={props.onBackToWork}>回到工作</button>
-          <button onClick={props.onExtend}>再休息 5 分钟</button>
+          <button onClick={props.onExtendOne}>再休息 1 分钟</button>
+          <button onClick={props.onExtendFive}>再休息 5 分钟</button>
         </div>
-        {props.allowEscExit && <small>也可以按 Esc 安全退出休息模式</small>}
       </div>
 
       <div className="pet-cloud" aria-hidden="true">
