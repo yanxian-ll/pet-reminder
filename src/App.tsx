@@ -281,8 +281,6 @@ export default function App() {
         <BreakScreen
           pets={pets}
           remainingSeconds={remainingSeconds}
-          exitDigit={exitDigit}
-          allowShortcutExit={settings.allowEscExit}
           onExtendOne={() => extendBreak(1)}
           onExtendFive={() => extendBreak(5)}
         />
@@ -438,8 +436,6 @@ function CompanionPanel(props: {
 function BreakScreen(props: {
   pets: ReturnType<typeof createPetSeeds>;
   remainingSeconds: number;
-  exitDigit: string;
-  allowShortcutExit: boolean;
   onExtendOne: () => void;
   onExtendFive: () => void;
 }) {
@@ -449,9 +445,6 @@ function BreakScreen(props: {
         <div className="message-pet">🐱</div>
         <h1>休息时间到！</h1>
         <p>站起来走一走，看看远处，喝口水。桌宠们会陪你休息。</p>
-        {props.allowShortcutExit && (
-          <p className="shortcut-note">本轮返回工作快捷键：数字 {props.exitDigit}</p>
-        )}
         <strong className="countdown">{formatDuration(props.remainingSeconds)}</strong>
         <div className="break-actions">
           <button onClick={props.onExtendOne}>再休息 1 分钟</button>
