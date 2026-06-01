@@ -17,8 +17,33 @@ const WEEKDAYS: Array<{ id: Weekday; label: string }> = [
   { id: 'Sun', label: '日' }
 ];
 
+const BREAK_PENALTY_STORAGE_KEY = 'deskpet-rest-reminder.break-penalty-pets.v1';
+const MAX_BREAK_PENALTY_PETS = 180;
+const MAX_EFFECTIVE_BREAK_PETS = 360;
+
+type RippleSeed = {
+  id: number;
+  x: number;
+  y: number;
+  size: number;
+};
+
 function isTauriRuntime() {
   return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
+}
+
+function loadBreakPenaltyPets() {
+  try {
+    const raw = localStorage.getItem(BREAK_PENALTY_STORAGE_KEY);
+    const parsed = raw ? Number(raw) : 0;
+    return Number.isFinite(parsed) ? Math.min(MAX_BREAK_PENALTY_PETS, Math.max(0, Math.round(parsed))) : 0;
+  } catch {
+    return 0;
+  }
+}
+
+function saveBreakPenaltyPets(value: number) {
+  localStorage.setItem(BREAK_PENALTY_STORAGE_KEY, String(Math.min(MAX_BREAK_PENALTY_PETS, Math.max(0, value))));
 }
 
 export default function App() {
@@ -29,14 +54,20 @@ export default function App() {
   const [phaseEnd, setPhaseEnd] = useState(() => Date.now() + DEFAULT_SETTINGS.focusMinutes * 60_000);
   const [remainingSeconds, setRemainingSeconds] = useState(() => secondsUntil(phaseEnd));
   const [salt, setSalt] = useState(() => Math.floor(Math.random() * 10_000));
+  const [extraBreakPetCount, setExtraBreakPetCount] = useState(() => loadBreakPenaltyPets());
   const modeRef = useRef<PetMode>(mode);
   const pausedRef = useRef(paused);
   const settingsRef = useRef(settings);
   const phaseEndRef = useRef(phaseEnd);
 
+  const effectiveBreakPetCount = Math.min(
+    MAX_EFFECTIVE_BREAK_PETS,
+    settings.breakPetCount + extraBreakPetCount
+  );
+
   const pets = useMemo(
-    () => createPetSeeds(settings.breakPetCount, salt),
-    [settings.breakPetCount, salt]
+    () => createPetSeeds(effectiveBreakPetCount, salt),
+    [effectiveBreakPetCount, salt]
   );
 
   useEffect(() => {
@@ -55,6 +86,10 @@ export default function App() {
   useEffect(() => {
     phaseEndRef.current = phaseEnd;
   }, [phaseEnd]);
+
+  useEffect(() => {
+    saveBreakPenaltyPets(extraBreakPetCount);
+  }, [extraBreakPetCount]);
 
   const applyWindowMode = useCallback(async (nextMode: PetMode, settingsPanelOpen = panelOpen) => {
     if (!isTauriRuntime()) return;
@@ -102,6 +137,24 @@ export default function App() {
     setPanelOpen(false);
     void applyWindowMode('break', false);
   }, [applyWindowMode]);
+
+  const addEarlyExitPenalty = useCallback(() => {
+    const baseCount = settingsRef.current.breakPetCount;
+    const increment = Math.max(18, Math.round(baseCount * 0.35));
+    setExtraBreakPetCount((value) => Math.min(MAX_BREAK_PENALTY_PETS, value + increment));
+  }, []);
+
+  const returnToWorkFromBreak = useCallback(() => {
+    if (modeRef.current === 'break' && secondsUntil(phaseEndRef.current) > 5) {
+      addEarlyExitPenalty();
+    }
+    startWork();
+  }, [addEarlyExitPenalty, startWork]);
+
+  const finishBreakNaturally = useCallback(() => {
+    setExtraBreakPetCount(0);
+    startWork();
+  }, [startWork]);
 
   const togglePause = useCallback(() => {
     setPaused((value) => !value);
@@ -158,12 +211,12 @@ export default function App() {
       if (currentMode === 'work') {
         startBreak();
       } else if (currentMode === 'break') {
-        startWork();
+        finishBreakNaturally();
       }
     }, 1000);
 
     return () => window.clearInterval(timer);
-  }, [applyWindowMode, startBreak, startWork]);
+  }, [applyWindowMode, finishBreakNaturally, startBreak, startWork]);
 
   useEffect(() => {
     if (!isTauriRuntime()) return;
@@ -175,7 +228,7 @@ export default function App() {
           break;
         case 'back-to-work':
           setPaused(false);
-          startWork();
+          returnToWorkFromBreak();
           break;
         case 'toggle-pause':
           togglePause();
@@ -193,18 +246,18 @@ export default function App() {
     return () => {
       void unlistenPromise.then((unlisten) => unlisten());
     };
-  }, [applyWindowMode, startBreak, startWork, togglePause]);
+  }, [applyWindowMode, returnToWorkFromBreak, startBreak, togglePause]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape' && settingsRef.current.allowEscExit && modeRef.current === 'break') {
-        startWork();
+        returnToWorkFromBreak();
       }
     };
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [startWork]);
+  }, [returnToWorkFromBreak]);
 
   const updateSettings = useCallback((patch: Partial<DeskPetSettings>) => {
     setSettingsState((current) => sanitizeSettings({ ...current, ...patch }));
@@ -245,7 +298,8 @@ export default function App() {
         <BreakScreen
           pets={pets}
           remainingSeconds={remainingSeconds}
-          onBackToWork={startWork}
+          extraBreakPetCount={extraBreakPetCount}
+          onBackToWork={returnToWorkFromBreak}
           onExtend={() => startBreak(5)}
           allowEscExit={settings.allowEscExit}
         />
@@ -366,7 +420,7 @@ function CompanionPanel(props: {
             <input
               type="range"
               min={1}
-              max={200}
+              max={260}
               value={props.settings.breakPetCount}
               onChange={(event) => props.onUpdateSettings({ breakPetCount: Number(event.currentTarget.value) })}
             />
@@ -406,22 +460,67 @@ function CompanionPanel(props: {
 function BreakScreen(props: {
   pets: ReturnType<typeof createPetSeeds>;
   remainingSeconds: number;
+  extraBreakPetCount: number;
   onBackToWork: () => void;
   onExtend: () => void;
   allowEscExit: boolean;
 }) {
+  const [ripples, setRipples] = useState<RippleSeed[]>([]);
+  const lastRippleAtRef = useRef(0);
+
+  const addRipple = useCallback((clientX: number, clientY: number, strong = false) => {
+    const now = Date.now();
+    if (!strong && now - lastRippleAtRef.current < 85) return;
+    lastRippleAtRef.current = now;
+
+    const id = now + Math.random();
+    const ripple: RippleSeed = {
+      id,
+      x: clientX,
+      y: clientY,
+      size: strong ? 260 : 150
+    };
+
+    setRipples((current) => [...current.slice(-16), ripple]);
+    window.setTimeout(() => {
+      setRipples((current) => current.filter((item) => item.id !== id));
+    }, 1100);
+  }, []);
+
   return (
-    <section className="break-screen">
+    <section
+      className="break-screen"
+      onMouseMove={(event) => addRipple(event.clientX, event.clientY)}
+      onPointerDown={(event) => addRipple(event.clientX, event.clientY, true)}
+    >
+      <div className="ripple-layer" aria-hidden="true">
+        {ripples.map((ripple) => (
+          <span
+            className="water-ripple"
+            key={ripple.id}
+            style={{
+              left: `${ripple.x}px`,
+              top: `${ripple.y}px`,
+              width: `${ripple.size}px`,
+              height: `${ripple.size}px`
+            }}
+          />
+        ))}
+      </div>
+
       <div className="break-message">
         <div className="message-pet">🐱</div>
         <h1>休息时间到！</h1>
         <p>站起来走一走，看看远处，喝口水。桌宠们会陪你休息。</p>
+        {props.extraBreakPetCount > 0 && (
+          <p className="penalty-note">上次没休息完，本次追加 {props.extraBreakPetCount} 只桌宠监督你。</p>
+        )}
         <strong className="countdown">{formatDuration(props.remainingSeconds)}</strong>
         <div className="break-actions">
           <button onClick={props.onBackToWork}>回到工作</button>
           <button onClick={props.onExtend}>再休息 5 分钟</button>
         </div>
-        {props.allowEscExit && <small>也可以按 Esc 安全退出休息模式</small>}
+        {props.allowEscExit && <small>也可以按 Esc 安全退出休息模式；提前退出会让下次桌宠变多</small>}
       </div>
 
       <div className="pet-cloud" aria-hidden="true">
