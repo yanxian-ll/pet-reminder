@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { CSSProperties } from 'react';
 import { enable, disable, isEnabled } from '@tauri-apps/plugin-autostart';
 import { listen } from '@tauri-apps/api/event';
-import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWindow, LogicalPosition, LogicalSize } from '@tauri-apps/api/window';
 import type { DeskPetSettings, PetMode, Weekday } from './types';
 import { DEFAULT_SETTINGS, loadSettings, saveSettings, sanitizeSettings } from './settings';
@@ -23,24 +21,6 @@ const BREAK_PENALTY_STORAGE_KEY = 'deskpet-rest-reminder.break-penalty-pets.v1';
 const MAX_BREAK_PENALTY_PETS = 180;
 const MAX_EFFECTIVE_BREAK_PETS = 360;
 
-type CursorPosition = {
-  x: number;
-  y: number;
-};
-
-type RippleSeed = {
-  id: number;
-  x: number;
-  y: number;
-  size: number;
-};
-
-type BreakScreenStyle = CSSProperties & {
-  '--ripple-x': string;
-  '--ripple-y': string;
-  '--wave-power': string;
-};
-
 function isTauriRuntime() {
   return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 }
@@ -57,16 +37,6 @@ function loadBreakPenaltyPets() {
 
 function saveBreakPenaltyPets(value: number) {
   localStorage.setItem(BREAK_PENALTY_STORAGE_KEY, String(Math.min(MAX_BREAK_PENALTY_PETS, Math.max(0, value))));
-}
-
-async function setWindowClickThrough(enabled: boolean) {
-  if (!isTauriRuntime()) return;
-
-  try {
-    await invoke('set_click_through', { enabled });
-  } catch (error) {
-    console.warn('Failed to change click-through mode:', error);
-  }
 }
 
 export default function App() {
@@ -127,11 +97,10 @@ export default function App() {
         await appWindow.setSize(new LogicalSize(window.screen.width, window.screen.height));
         await appWindow.setPosition(new LogicalPosition(0, 0));
         await appWindow.show();
-        await setWindowClickThrough(true);
+        await appWindow.setFocus();
         return;
       }
 
-      await setWindowClickThrough(false);
       const width = settingsPanelOpen ? 360 : 236;
       const height = settingsPanelOpen ? 560 : 236;
       const x = Math.max(16, window.screen.availWidth - width - 28);
@@ -294,26 +263,6 @@ export default function App() {
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [returnToWorkFromBreak]);
-
-  useEffect(() => {
-    if (!isTauriRuntime() || mode !== 'break') return;
-
-    let wasEscPressed = false;
-    const timer = window.setInterval(() => {
-      void invoke<boolean>('is_escape_pressed')
-        .then((isPressed) => {
-          if (isPressed && !wasEscPressed && settingsRef.current.allowEscExit && modeRef.current === 'break') {
-            returnToWorkFromBreak();
-          }
-          wasEscPressed = isPressed;
-        })
-        .catch(() => {
-          // Browser dev mode does not provide this command; keydown still works there.
-        });
-    }, 80);
-
-    return () => window.clearInterval(timer);
-  }, [mode, returnToWorkFromBreak]);
 
   const updateSettings = useCallback((patch: Partial<DeskPetSettings>) => {
     setSettingsState((current) => sanitizeSettings({ ...current, ...patch }));
@@ -519,105 +468,8 @@ function BreakScreen(props: {
   onExtendOne: () => void;
   onExtendFive: () => void;
 }) {
-  const [ripples, setRipples] = useState<RippleSeed[]>([]);
-  const [cursor, setCursor] = useState<CursorPosition>(() => ({
-    x: typeof window === 'undefined' ? 0 : window.innerWidth / 2,
-    y: typeof window === 'undefined' ? 0 : window.innerHeight / 2
-  }));
-  const lastRippleAtRef = useRef(0);
-  const lastCursorRef = useRef<CursorPosition | null>(null);
-  const clickThroughRef = useRef(true);
-
-  const addRipple = useCallback((clientX: number, clientY: number, strong = false) => {
-    const now = Date.now();
-    if (!strong && now - lastRippleAtRef.current < 95) return;
-    lastRippleAtRef.current = now;
-
-    const screenSize = Math.max(window.innerWidth, window.innerHeight);
-    const id = now + Math.random();
-    const ripple: RippleSeed = {
-      id,
-      x: clientX,
-      y: clientY,
-      size: strong ? screenSize * 3.2 : screenSize * 1.95
-    };
-
-    setRipples((current) => [...current.slice(-10), ripple]);
-    window.setTimeout(() => {
-      setRipples((current) => current.filter((item) => item.id !== id));
-    }, 1900);
-  }, []);
-
-  useEffect(() => {
-    if (!isTauriRuntime()) return;
-
-    const timer = window.setInterval(() => {
-      void invoke<CursorPosition | null>('cursor_position')
-        .then((point) => {
-          if (!point) return;
-
-          const x = Math.max(0, Math.min(window.innerWidth, point.x));
-          const y = Math.max(0, Math.min(window.innerHeight, point.y));
-          const next = { x, y };
-          const last = lastCursorRef.current;
-          setCursor(next);
-
-          const insideMessage = Math.abs(x - window.innerWidth / 2) < 280 && Math.abs(y - window.innerHeight / 2) < 270;
-          const shouldClickThrough = !insideMessage;
-          if (clickThroughRef.current !== shouldClickThrough) {
-            clickThroughRef.current = shouldClickThrough;
-            void setWindowClickThrough(shouldClickThrough);
-          }
-
-          if (!last || Math.hypot(next.x - last.x, next.y - last.y) > 24) {
-            addRipple(next.x, next.y);
-            lastCursorRef.current = next;
-          }
-        })
-        .catch(() => {
-          // Browser dev mode does not provide this command; mouse events still work there.
-        });
-    }, 60);
-
-    return () => {
-      window.clearInterval(timer);
-      void setWindowClickThrough(false);
-    };
-  }, [addRipple]);
-
-  const screenStyle: BreakScreenStyle = {
-    '--ripple-x': `${cursor.x}px`,
-    '--ripple-y': `${cursor.y}px`,
-    '--wave-power': `${Math.max(0.9, Math.min(1.8, ripples.length / 5 + 0.9))}`
-  };
-
   return (
-    <section
-      className="break-screen"
-      style={screenStyle}
-      onMouseMove={(event) => {
-        setCursor({ x: event.clientX, y: event.clientY });
-        addRipple(event.clientX, event.clientY);
-      }}
-      onPointerDown={(event) => addRipple(event.clientX, event.clientY, true)}
-    >
-      <div className="wave-field" aria-hidden="true" />
-
-      <div className="ripple-layer" aria-hidden="true">
-        {ripples.map((ripple) => (
-          <span
-            className="water-ripple"
-            key={ripple.id}
-            style={{
-              left: `${ripple.x}px`,
-              top: `${ripple.y}px`,
-              width: `${ripple.size}px`,
-              height: `${ripple.size}px`
-            }}
-          />
-        ))}
-      </div>
-
+    <section className="break-screen">
       <div className="break-message">
         <div className="message-pet">🐱</div>
         <h1>休息时间到！</h1>
