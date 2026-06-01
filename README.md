@@ -1,87 +1,167 @@
-# 桌宠提醒休息
+# Pet Reminder
 
-Windows 桌宠休息提醒 MVP：工作时段只保留一个桌宠陪伴；休息时段切换为满屏桌宠，强提醒你离开屏幕休息。
+A Windows desktop pet rest reminder built with Tauri, React, TypeScript, and Vite.
 
-## 功能
+During work time, the app keeps one small desktop pet on screen. During break time, it switches to a full-screen pet overlay and reminds you to leave the screen.
 
-- Windows 桌面透明置顶桌宠窗口
-- 工作时段：一个可拖动桌宠，显示下次休息倒计时
-- 休息时段：全屏透明遮罩 + 多个桌宠占满屏幕
-- 支持专注/休息时长、工作日、工作时间、桌宠数量配置
-- 支持开机自动启动开关
-- 支持系统托盘菜单：立即休息、回到工作、暂停/恢复、设置、退出
-- 安全退出：休息模式下可按 `Esc` 或点击“回到工作”
+## Features
 
-## 技术栈
+- Windows transparent always-on-top desktop pet window.
+- Work mode: one desktop pet with a countdown to the next break.
+- Break mode: full-screen pet overlay with a translucent reminder card.
+- Default schedule: 20 minutes of work, then 2 minutes of rest.
+- Default break pet count: 60 pets.
+- Break reminder sound when rest starts.
+- Break controls: extend rest by 1 minute or 5 minutes.
+- Random numeric shortcut for leaving break mode. Each break shows a random digit, such as `7`; press that digit to return to work.
+- Optional auto-start on Windows login.
+- System tray menu: start break now, extend break by 1 minute, settings, and quit.
 
-- Tauri v2
-- React + TypeScript + Vite
-- Tauri Autostart Plugin
-- Tauri System Tray
+## Requirements
 
-## 本地开发
+Run commands in PowerShell.
 
-### Windows 前置依赖
+### 1. Install Git
 
-你需要先安装：
-
-1. Node.js LTS
-2. Rust stable
-3. Microsoft C++ Build Tools / Visual Studio Build Tools
-4. Microsoft Edge WebView2 Runtime
-
-### 安装依赖
-
-```bash
-npm install
+```powershell
+winget install --id Git.Git -e
 ```
 
-### 运行开发版
+Close and reopen PowerShell, then verify:
 
-```bash
+```powershell
+git --version
+```
+
+### 2. Install Node.js and npm
+
+```powershell
+winget install --id OpenJS.NodeJS.LTS -e
+```
+
+Close and reopen PowerShell, then verify:
+
+```powershell
+node -v
+npm -v
+```
+
+### 3. Install Rust, rustc, and cargo
+
+```powershell
+winget install --id Rustlang.Rustup -e
+```
+
+Close and reopen PowerShell, then run:
+
+```powershell
+rustup default stable-msvc
+rustup update
+```
+
+Verify:
+
+```powershell
+rustc -V
+cargo -V
+rustup -V
+```
+
+If `rustc` or `cargo` is not recognized, restart PowerShell or restart Windows. Rust is normally installed under:
+
+```text
+%USERPROFILE%\.cargo\bin
+```
+
+### 4. Install Microsoft C++ Build Tools
+
+Tauri on Windows needs the Microsoft C++ toolchain.
+
+```powershell
+winget install --id Microsoft.VisualStudio.2022.BuildTools -e --override "--wait --passive --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"
+```
+
+If the command does not install the C++ workload correctly, open the Visual Studio Build Tools installer and select:
+
+```text
+Desktop development with C++
+```
+
+Then restart PowerShell.
+
+### 5. Install Microsoft Edge WebView2 Runtime
+
+Most Windows 10/11 systems already include it. To install or repair it manually:
+
+```powershell
+winget install --id Microsoft.EdgeWebView2Runtime -e
+```
+
+## Clone and Run
+
+```powershell
+git clone https://github.com/yanxian-ll/pet-reminder.git
+cd pet-reminder
+npm install
 npm run tauri:dev
 ```
 
-### 构建 Windows 安装包
+## Build a Windows Installer
 
-```bash
+```powershell
 npm run tauri:build
 ```
 
-构建产物通常在：
+Build output is usually created under:
 
 ```text
-src-tauri/target/release/bundle/
+src-tauri\target\release\bundle\
 ```
 
-## 推荐的 GitHub 建仓命令
+Look for installers in:
 
-当前 ChatGPT 的 GitHub 连接器可以读写已有仓库文件，但没有暴露“新建仓库”接口。你可以在本项目目录下运行下面命令创建公开仓库并推送：
-
-```bash
-gh repo create yanxian-ll/deskpet-rest-reminder --public --source=. --remote=origin --push
+```text
+src-tauri\target\release\bundle\nsis\
+src-tauri\target\release\bundle\msi\
 ```
 
-没有安装 GitHub CLI 的话，可以先在 GitHub 网页新建公开仓库 `deskpet-rest-reminder`，然后运行：
+## Updating an Existing Local Copy
 
-```bash
-git init
-git add .
-git commit -m "Initial desk pet rest reminder MVP"
-git branch -M main
-git remote add origin https://github.com/yanxian-ll/deskpet-rest-reminder.git
-git push -u origin main
+If you have no local changes:
+
+```powershell
+git pull
+npm install
+npm run tauri:dev
 ```
 
-## 安全边界
+If Git says local files would be overwritten and you want to discard local changes:
 
-这个项目刻意保留了“回到工作”和 `Esc` 退出能力，不会锁死鼠标、键盘或隐藏退出入口。它的目标是强提醒休息，而不是做无法退出的屏幕锁定程序。
+```powershell
+git fetch origin
+git reset --hard origin/main
+npm install
+npm run tauri:dev
+```
 
-## 后续可以继续做
+## Troubleshooting
 
-- 多显示器全屏覆盖
-- 更多桌宠皮肤和 Live2D/Spine 动画
-- 休息统计和连续工作日报
-- 全局快捷键
-- 音效和语音提醒
-- 自定义“延后休息”的惩罚规则，例如桌宠数量翻倍
+### `rustc` or `cargo` is not recognized
+
+Restart PowerShell first. If it still fails, add this path to your user `Path`:
+
+```text
+%USERPROFILE%\.cargo\bin
+```
+
+### Build fails with C++ or linker errors
+
+Install or repair Microsoft C++ Build Tools and make sure the `Desktop development with C++` workload is selected.
+
+### The app does not show a sound notification
+
+Some Windows audio devices or privacy settings can block browser audio until the app has received user interaction. Click the app once, then trigger a break again.
+
+## Safety Notes
+
+The app keeps a visible quit option in the system tray. The random numeric shortcut exists so you can still leave break mode when needed, but it is less automatic than pressing Esc every time.
