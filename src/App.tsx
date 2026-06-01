@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { CSSProperties } from 'react';
 import { enable, disable, isEnabled } from '@tauri-apps/plugin-autostart';
 import { listen } from '@tauri-apps/api/event';
+import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWindow, LogicalPosition, LogicalSize } from '@tauri-apps/api/window';
 import type { DeskPetSettings, PetMode, Weekday } from './types';
 import { DEFAULT_SETTINGS, loadSettings, saveSettings, sanitizeSettings } from './settings';
@@ -21,11 +23,22 @@ const BREAK_PENALTY_STORAGE_KEY = 'deskpet-rest-reminder.break-penalty-pets.v1';
 const MAX_BREAK_PENALTY_PETS = 180;
 const MAX_EFFECTIVE_BREAK_PETS = 360;
 
+type CursorPosition = {
+  x: number;
+  y: number;
+};
+
 type RippleSeed = {
   id: number;
   x: number;
   y: number;
   size: number;
+};
+
+type BreakScreenStyle = CSSProperties & {
+  '--ripple-x': string;
+  '--ripple-y': string;
+  '--wave-power': string;
 };
 
 function isTauriRuntime() {
@@ -44,6 +57,21 @@ function loadBreakPenaltyPets() {
 
 function saveBreakPenaltyPets(value: number) {
   localStorage.setItem(BREAK_PENALTY_STORAGE_KEY, String(Math.min(MAX_BREAK_PENALTY_PETS, Math.max(0, value))));
+}
+
+async function setWindowClickThrough(enabled: boolean) {
+  if (!isTauriRuntime()) return;
+
+  try {
+    const appWindow = getCurrentWindow() as ReturnType<typeof getCurrentWindow> & {
+      setIgnoreCursorEvents?: (ignore: boolean) => Promise<void>;
+    };
+    if (typeof appWindow.setIgnoreCursorEvents === 'function') {
+      await appWindow.setIgnoreCursorEvents(enabled);
+    }
+  } catch (error) {
+    console.warn('Failed to change click-through mode:', error);
+  }
 }
 
 export default function App() {
@@ -104,10 +132,11 @@ export default function App() {
         await appWindow.setSize(new LogicalSize(window.screen.width, window.screen.height));
         await appWindow.setPosition(new LogicalPosition(0, 0));
         await appWindow.show();
-        await appWindow.setFocus();
+        await setWindowClickThrough(true);
         return;
       }
 
+      await setWindowClickThrough(false);
       const width = settingsPanelOpen ? 360 : 236;
       const height = settingsPanelOpen ? 560 : 236;
       const x = Math.max(16, window.screen.availWidth - width - 28);
@@ -133,6 +162,15 @@ export default function App() {
     setMode('break');
     setPaused(false);
     setPhaseEnd(Date.now() + minutes * 60_000);
+    setSalt((value) => value + 1);
+    setPanelOpen(false);
+    void applyWindowMode('break', false);
+  }, [applyWindowMode]);
+
+  const extendBreak = useCallback((minutes: number) => {
+    setMode('break');
+    setPaused(false);
+    setPhaseEnd((currentEnd) => Math.max(currentEnd, Date.now()) + minutes * 60_000);
     setSalt((value) => value + 1);
     setPanelOpen(false);
     void applyWindowMode('break', false);
@@ -226,6 +264,9 @@ export default function App() {
         case 'break-now':
           startBreak();
           break;
+        case 'extend-break-1':
+          extendBreak(1);
+          break;
         case 'back-to-work':
           setPaused(false);
           returnToWorkFromBreak();
@@ -246,7 +287,7 @@ export default function App() {
     return () => {
       void unlistenPromise.then((unlisten) => unlisten());
     };
-  }, [applyWindowMode, returnToWorkFromBreak, startBreak, togglePause]);
+  }, [applyWindowMode, extendBreak, returnToWorkFromBreak, startBreak, togglePause]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -258,6 +299,26 @@ export default function App() {
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [returnToWorkFromBreak]);
+
+  useEffect(() => {
+    if (!isTauriRuntime() || mode !== 'break') return;
+
+    let wasEscPressed = false;
+    const timer = window.setInterval(() => {
+      void invoke<boolean>('is_escape_pressed')
+        .then((isPressed) => {
+          if (isPressed && !wasEscPressed && settingsRef.current.allowEscExit && modeRef.current === 'break') {
+            returnToWorkFromBreak();
+          }
+          wasEscPressed = isPressed;
+        })
+        .catch(() => {
+          // Browser dev mode does not provide this command; keydown still works there.
+        });
+    }, 80);
+
+    return () => window.clearInterval(timer);
+  }, [mode, returnToWorkFromBreak]);
 
   const updateSettings = useCallback((patch: Partial<DeskPetSettings>) => {
     setSettingsState((current) => sanitizeSettings({ ...current, ...patch }));
@@ -299,9 +360,8 @@ export default function App() {
           pets={pets}
           remainingSeconds={remainingSeconds}
           extraBreakPetCount={extraBreakPetCount}
-          onBackToWork={returnToWorkFromBreak}
-          onExtend={() => startBreak(5)}
-          allowEscExit={settings.allowEscExit}
+          onExtendOne={() => extendBreak(1)}
+          onExtendFive={() => extendBreak(5)}
         />
       ) : (
         <CompanionPanel
@@ -461,38 +521,82 @@ function BreakScreen(props: {
   pets: ReturnType<typeof createPetSeeds>;
   remainingSeconds: number;
   extraBreakPetCount: number;
-  onBackToWork: () => void;
-  onExtend: () => void;
-  allowEscExit: boolean;
+  onExtendOne: () => void;
+  onExtendFive: () => void;
 }) {
   const [ripples, setRipples] = useState<RippleSeed[]>([]);
+  const [cursor, setCursor] = useState<CursorPosition>(() => ({
+    x: typeof window === 'undefined' ? 0 : window.innerWidth / 2,
+    y: typeof window === 'undefined' ? 0 : window.innerHeight / 2
+  }));
   const lastRippleAtRef = useRef(0);
+  const lastCursorRef = useRef<CursorPosition | null>(null);
 
   const addRipple = useCallback((clientX: number, clientY: number, strong = false) => {
     const now = Date.now();
-    if (!strong && now - lastRippleAtRef.current < 85) return;
+    if (!strong && now - lastRippleAtRef.current < 95) return;
     lastRippleAtRef.current = now;
 
+    const screenSize = Math.max(window.innerWidth, window.innerHeight);
     const id = now + Math.random();
     const ripple: RippleSeed = {
       id,
       x: clientX,
       y: clientY,
-      size: strong ? 260 : 150
+      size: strong ? screenSize * 2.9 : screenSize * 1.75
     };
 
-    setRipples((current) => [...current.slice(-16), ripple]);
+    setRipples((current) => [...current.slice(-10), ripple]);
     window.setTimeout(() => {
       setRipples((current) => current.filter((item) => item.id !== id));
-    }, 1100);
+    }, 1800);
   }, []);
+
+  useEffect(() => {
+    if (!isTauriRuntime()) return;
+
+    const timer = window.setInterval(() => {
+      void invoke<CursorPosition | null>('cursor_position')
+        .then((point) => {
+          if (!point) return;
+
+          const x = Math.max(0, Math.min(window.innerWidth, point.x));
+          const y = Math.max(0, Math.min(window.innerHeight, point.y));
+          const next = { x, y };
+          const last = lastCursorRef.current;
+          setCursor(next);
+
+          if (!last || Math.hypot(next.x - last.x, next.y - last.y) > 28) {
+            addRipple(next.x, next.y);
+            lastCursorRef.current = next;
+          }
+        })
+        .catch(() => {
+          // Browser dev mode does not provide this command; mouse events still work there.
+        });
+    }, 70);
+
+    return () => window.clearInterval(timer);
+  }, [addRipple]);
+
+  const screenStyle: BreakScreenStyle = {
+    '--ripple-x': `${cursor.x}px`,
+    '--ripple-y': `${cursor.y}px`,
+    '--wave-power': `${Math.max(0.7, Math.min(1.35, ripples.length / 6 + 0.7))}`
+  };
 
   return (
     <section
       className="break-screen"
-      onMouseMove={(event) => addRipple(event.clientX, event.clientY)}
+      style={screenStyle}
+      onMouseMove={(event) => {
+        setCursor({ x: event.clientX, y: event.clientY });
+        addRipple(event.clientX, event.clientY);
+      }}
       onPointerDown={(event) => addRipple(event.clientX, event.clientY, true)}
     >
+      <div className="wave-field" aria-hidden="true" />
+
       <div className="ripple-layer" aria-hidden="true">
         {ripples.map((ripple) => (
           <span
@@ -517,10 +621,9 @@ function BreakScreen(props: {
         )}
         <strong className="countdown">{formatDuration(props.remainingSeconds)}</strong>
         <div className="break-actions">
-          <button onClick={props.onBackToWork}>回到工作</button>
-          <button onClick={props.onExtend}>再休息 5 分钟</button>
+          <button onClick={props.onExtendOne}>再休息 1 分钟</button>
+          <button onClick={props.onExtendFive}>再休息 5 分钟</button>
         </div>
-        {props.allowEscExit && <small>也可以按 Esc 安全退出休息模式；提前退出会让下次桌宠变多</small>}
       </div>
 
       <div className="pet-cloud" aria-hidden="true">
