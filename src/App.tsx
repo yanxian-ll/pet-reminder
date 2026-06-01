@@ -63,12 +63,7 @@ async function setWindowClickThrough(enabled: boolean) {
   if (!isTauriRuntime()) return;
 
   try {
-    const appWindow = getCurrentWindow() as ReturnType<typeof getCurrentWindow> & {
-      setIgnoreCursorEvents?: (ignore: boolean) => Promise<void>;
-    };
-    if (typeof appWindow.setIgnoreCursorEvents === 'function') {
-      await appWindow.setIgnoreCursorEvents(enabled);
-    }
+    await invoke('set_click_through', { enabled });
   } catch (error) {
     console.warn('Failed to change click-through mode:', error);
   }
@@ -531,6 +526,7 @@ function BreakScreen(props: {
   }));
   const lastRippleAtRef = useRef(0);
   const lastCursorRef = useRef<CursorPosition | null>(null);
+  const clickThroughRef = useRef(true);
 
   const addRipple = useCallback((clientX: number, clientY: number, strong = false) => {
     const now = Date.now();
@@ -543,13 +539,13 @@ function BreakScreen(props: {
       id,
       x: clientX,
       y: clientY,
-      size: strong ? screenSize * 2.9 : screenSize * 1.75
+      size: strong ? screenSize * 3.2 : screenSize * 1.95
     };
 
     setRipples((current) => [...current.slice(-10), ripple]);
     window.setTimeout(() => {
       setRipples((current) => current.filter((item) => item.id !== id));
-    }, 1800);
+    }, 1900);
   }, []);
 
   useEffect(() => {
@@ -566,7 +562,14 @@ function BreakScreen(props: {
           const last = lastCursorRef.current;
           setCursor(next);
 
-          if (!last || Math.hypot(next.x - last.x, next.y - last.y) > 28) {
+          const insideMessage = Math.abs(x - window.innerWidth / 2) < 280 && Math.abs(y - window.innerHeight / 2) < 270;
+          const shouldClickThrough = !insideMessage;
+          if (clickThroughRef.current !== shouldClickThrough) {
+            clickThroughRef.current = shouldClickThrough;
+            void setWindowClickThrough(shouldClickThrough);
+          }
+
+          if (!last || Math.hypot(next.x - last.x, next.y - last.y) > 24) {
             addRipple(next.x, next.y);
             lastCursorRef.current = next;
           }
@@ -574,15 +577,18 @@ function BreakScreen(props: {
         .catch(() => {
           // Browser dev mode does not provide this command; mouse events still work there.
         });
-    }, 70);
+    }, 60);
 
-    return () => window.clearInterval(timer);
+    return () => {
+      window.clearInterval(timer);
+      void setWindowClickThrough(false);
+    };
   }, [addRipple]);
 
   const screenStyle: BreakScreenStyle = {
     '--ripple-x': `${cursor.x}px`,
     '--ripple-y': `${cursor.y}px`,
-    '--wave-power': `${Math.max(0.7, Math.min(1.35, ripples.length / 6 + 0.7))}`
+    '--wave-power': `${Math.max(0.9, Math.min(1.8, ripples.length / 5 + 0.9))}`
   };
 
   return (
