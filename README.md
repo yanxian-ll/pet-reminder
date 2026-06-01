@@ -1,87 +1,221 @@
-# 桌宠提醒休息
+# Pet Reminder
 
-Windows 桌宠休息提醒 MVP：工作时段只保留一个桌宠陪伴；休息时段切换为满屏桌宠，强提醒你离开屏幕休息。
+A Windows desktop pet rest reminder MVP.
 
-## 功能
+During work time, the app keeps one small desktop pet on screen. During break time, it switches to a full-screen break mode with many pets so you are strongly reminded to leave the screen and rest.
 
-- Windows 桌面透明置顶桌宠窗口
-- 工作时段：一个可拖动桌宠，显示下次休息倒计时
-- 休息时段：全屏透明遮罩 + 多个桌宠占满屏幕
-- 支持专注/休息时长、工作日、工作时间、桌宠数量配置
-- 支持开机自动启动开关
-- 支持系统托盘菜单：立即休息、回到工作、暂停/恢复、设置、退出
-- 安全退出：休息模式下可按 `Esc` 或点击“回到工作”
+## Features
 
-## 技术栈
+- Transparent always-on-top desktop pet window for Windows.
+- Work mode: one draggable pet and a countdown to the next break.
+- Break mode: full-screen overlay with many animated pets.
+- Configurable focus minutes, break minutes, workdays, work hours, and break pet count.
+- Optional auto-start on system login.
+- System tray actions: start break now, return to work, pause or resume reminders, open settings, and quit.
+- Safe exit: press `Esc` or click "Back to work" during break mode.
+
+## Tech Stack
 
 - Tauri v2
-- React + TypeScript + Vite
+- React
+- TypeScript
+- Vite
 - Tauri Autostart Plugin
 - Tauri System Tray
 
-## 本地开发
+## Windows Setup
 
-### Windows 前置依赖
+This project is a Tauri desktop app, so you need Node.js/npm for the frontend and Rust/rustc/cargo for the Tauri backend.
 
-你需要先安装：
+Run all commands in **PowerShell**.
 
-1. Node.js LTS
-2. Rust stable
-3. Microsoft C++ Build Tools / Visual Studio Build Tools
-4. Microsoft Edge WebView2 Runtime
+### 1. Install Node.js and npm
 
-### 安装依赖
+Recommended command-line install:
 
-```bash
+```powershell
+winget install --id OpenJS.NodeJS.LTS -e
+```
+
+Close and reopen PowerShell, then verify:
+
+```powershell
+node -v
+npm -v
+```
+
+If `winget` is unavailable, install the LTS version from:
+
+```text
+https://nodejs.org/en/download
+```
+
+### 2. Install Rust, rustc, and cargo
+
+Install Rust through rustup:
+
+```powershell
+winget install --id Rustlang.Rustup -e
+```
+
+Close and reopen PowerShell, then set the MSVC Rust toolchain as the default:
+
+```powershell
+rustup default stable-msvc
+rustup update
+```
+
+Verify that `rustc` and `cargo` are installed:
+
+```powershell
+rustc -V
+cargo -V
+rustup -V
+```
+
+If PowerShell cannot find `rustc` or `cargo`, restart PowerShell or restart Windows. Rust normally installs the tools under:
+
+```text
+%USERPROFILE%\.cargo\bin
+```
+
+If needed, add this path to your user `Path` environment variable.
+
+### 3. Install Microsoft C++ Build Tools
+
+Tauri on Windows requires Microsoft C++ Build Tools.
+
+Command-line install:
+
+```powershell
+winget install --id Microsoft.VisualStudio.2022.BuildTools -e --override "--wait --passive --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"
+```
+
+If the command-line install does not add the C++ workload correctly, open the Visual Studio Build Tools installer and select:
+
+```text
+Desktop development with C++
+```
+
+Then restart PowerShell.
+
+### 4. Install Microsoft Edge WebView2 Runtime
+
+Most modern Windows 10/11 systems already include WebView2 Runtime. You can still install or repair it with:
+
+```powershell
+winget install --id Microsoft.EdgeWebView2Runtime -e
+```
+
+### 5. Verify the full development environment
+
+Run:
+
+```powershell
+node -v
+npm -v
+rustc -V
+cargo -V
+rustup -V
+```
+
+You should see version numbers for all commands.
+
+## Clone the Repository
+
+```powershell
+git clone https://github.com/yanxian-ll/pet-reminder.git
+cd pet-reminder
+```
+
+If Git is not installed:
+
+```powershell
+winget install --id Git.Git -e
+```
+
+Then close and reopen PowerShell and run the clone command again.
+
+## Install Project Dependencies
+
+```powershell
 npm install
 ```
 
-### 运行开发版
+## Run in Development Mode
 
-```bash
+```powershell
 npm run tauri:dev
 ```
 
-### 构建 Windows 安装包
+Expected behavior:
 
-```bash
+- A small transparent pet window appears.
+- Work mode shows one pet.
+- Break mode shows many pets in a full-screen overlay.
+- You can press `Esc` during break mode to return to work mode.
+
+## Build a Windows Installer
+
+```powershell
 npm run tauri:build
 ```
 
-构建产物通常在：
+The build output is usually generated under:
 
 ```text
-src-tauri/target/release/bundle/
+src-tauri\target\release\bundle\
 ```
 
-## 推荐的 GitHub 建仓命令
+Look for installers under folders such as:
 
-当前 ChatGPT 的 GitHub 连接器可以读写已有仓库文件，但没有暴露“新建仓库”接口。你可以在本项目目录下运行下面命令创建公开仓库并推送：
-
-```bash
-gh repo create yanxian-ll/deskpet-rest-reminder --public --source=. --remote=origin --push
+```text
+src-tauri\target\release\bundle\nsis\
+src-tauri\target\release\bundle\msi\
 ```
 
-没有安装 GitHub CLI 的话，可以先在 GitHub 网页新建公开仓库 `deskpet-rest-reminder`，然后运行：
+## Common Issues
 
-```bash
-git init
-git add .
-git commit -m "Initial desk pet rest reminder MVP"
-git branch -M main
-git remote add origin https://github.com/yanxian-ll/deskpet-rest-reminder.git
-git push -u origin main
+### `rustc` or `cargo` is not recognized
+
+Restart PowerShell first. If it still fails, make sure this path exists and is in your user `Path`:
+
+```text
+%USERPROFILE%\.cargo\bin
 ```
 
-## 安全边界
+### Tauri build fails with C++ or linker errors
 
-这个项目刻意保留了“回到工作”和 `Esc` 退出能力，不会锁死鼠标、键盘或隐藏退出入口。它的目标是强提醒休息，而不是做无法退出的屏幕锁定程序。
+Install or repair Microsoft C++ Build Tools and make sure the `Desktop development with C++` workload is selected.
 
-## 后续可以继续做
+### Vite port is already in use
 
-- 多显示器全屏覆盖
-- 更多桌宠皮肤和 Live2D/Spine 动画
-- 休息统计和连续工作日报
-- 全局快捷键
-- 音效和语音提醒
-- 自定义“延后休息”的惩罚规则，例如桌宠数量翻倍
+This project uses port `1420` during development. Check whether another process is using it:
+
+```powershell
+netstat -ano | findstr :1420
+```
+
+Stop that process or change the Vite/Tauri dev port configuration.
+
+### WebView2 errors
+
+Install or repair WebView2 Runtime:
+
+```powershell
+winget install --id Microsoft.EdgeWebView2Runtime -e
+```
+
+## Safety Notes
+
+This project intentionally keeps visible exit controls. It does not lock the keyboard or mouse, hide the process, or prevent the user from leaving break mode. The goal is to strongly remind you to rest, not to create an unescapable screen lock.
+
+## Future Ideas
+
+- Multi-monitor break overlays.
+- More pet skins.
+- Live2D or Spine animation support.
+- Global hotkeys.
+- Sound effects or voice reminders.
+- Rest statistics and daily focus reports.
+- A stricter "snooze penalty" mode, such as doubling the pet count after delaying a break.
