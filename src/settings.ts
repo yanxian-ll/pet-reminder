@@ -4,8 +4,8 @@ export const DEFAULT_SETTINGS: DeskPetSettings = {
   workDays: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'],
   workStart: '09:00',
   workEnd: '18:00',
-  focusMinutes: 50,
-  breakMinutes: 10,
+  focusMinutes: 20,
+  breakMinutes: 2,
   breakPetCount: 60,
   autoStart: false,
   strictBreakOverlay: true,
@@ -34,7 +34,7 @@ export function sanitizeSettings(settings: DeskPetSettings): DeskPetSettings {
     ...settings,
     focusMinutes: clampInteger(settings.focusMinutes, 5, 180),
     breakMinutes: clampInteger(settings.breakMinutes, 1, 60),
-    breakPetCount: clampInteger(settings.breakPetCount, 1, 200),
+    breakPetCount: clampInteger(settings.breakPetCount, 60, 200),
     workStart: normalizeTime(settings.workStart, DEFAULT_SETTINGS.workStart),
     workEnd: normalizeTime(settings.workEnd, DEFAULT_SETTINGS.workEnd)
   };
