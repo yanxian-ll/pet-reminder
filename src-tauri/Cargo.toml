@@ -1,0 +1,21 @@
+[package]
+name = "deskpet-rest-reminder"
+version = "0.1.0"
+description = "Windows 桌宠休息提醒"
+authors = ["yanxian-ll"]
+license = "MIT"
+edition = "2021"
+rust-version = "1.77.2"
+
+[lib]
+name = "deskpet_rest_reminder_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-autostart = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
