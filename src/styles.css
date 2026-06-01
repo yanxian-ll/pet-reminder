@@ -230,45 +230,20 @@ button {
   width: 100%;
   height: 100%;
   overflow: hidden;
-  cursor: crosshair;
 }
 
 .mode-break.strict .break-screen {
-  background:
-    radial-gradient(circle at var(--ripple-x, 50%) var(--ripple-y, 50%), rgba(56, 189, 248, 0.24), transparent 24%),
-    radial-gradient(circle at 50% 35%, rgba(255, 255, 255, 0.78), rgba(15, 23, 42, 0.32));
+  background: radial-gradient(circle at 50% 35%, rgba(255, 255, 255, 0.78), rgba(15, 23, 42, 0.32));
   backdrop-filter: blur(2px);
 }
 
 .mode-break.gentle .break-screen {
-  background:
-    radial-gradient(circle at var(--ripple-x, 50%) var(--ripple-y, 50%), rgba(56, 189, 248, 0.2), transparent 24%),
-    rgba(255, 255, 255, 0.12);
-}
-
-.ripple-layer {
-  position: absolute;
-  inset: 0;
-  z-index: 1;
-  pointer-events: none;
-  overflow: hidden;
-}
-
-.water-ripple {
-  position: absolute;
-  transform: translate(-50%, -50%) scale(0.25);
-  border-radius: 999px;
-  border: 2px solid rgba(14, 165, 233, 0.46);
-  background: radial-gradient(circle, rgba(224, 242, 254, 0.38) 0%, rgba(14, 165, 233, 0.16) 42%, transparent 68%);
-  box-shadow:
-    0 0 28px rgba(14, 165, 233, 0.28),
-    inset 0 0 28px rgba(255, 255, 255, 0.32);
-  animation: water-ripple 1.1s ease-out forwards;
+  background: rgba(255, 255, 255, 0.12);
 }
 
 .break-message {
   position: absolute;
-  z-index: 4;
+  z-index: 3;
   left: 50%;
   top: 50%;
   transform: translate(-50%, -50%);
@@ -297,18 +272,6 @@ button {
   max-width: 32em;
   color: #475569;
   line-height: 1.7;
-}
-
-.break-message .penalty-note {
-  width: fit-content;
-  max-width: 100%;
-  margin: 0 auto 14px;
-  padding: 8px 12px;
-  border-radius: 999px;
-  background: rgba(254, 226, 226, 0.92);
-  color: #991b1b;
-  font-weight: 700;
-  line-height: 1.4;
 }
 
 .countdown {
@@ -381,19 +344,5 @@ button {
   }
   50% {
     transform: translate(-50%, -50%) translateY(-18px) scale(1.08);
-  }
-}
-
-@keyframes water-ripple {
-  0% {
-    opacity: 0.78;
-    transform: translate(-50%, -50%) scale(0.18);
-  }
-  70% {
-    opacity: 0.32;
-  }
-  100% {
-    opacity: 0;
-    transform: translate(-50%, -50%) scale(1.25);
   }
 }

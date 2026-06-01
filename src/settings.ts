@@ -6,7 +6,7 @@ export const DEFAULT_SETTINGS: DeskPetSettings = {
   workEnd: '18:00',
   focusMinutes: 50,
   breakMinutes: 10,
-  breakPetCount: 96,
+  breakPetCount: 60,
   autoStart: false,
   strictBreakOverlay: true,
   allowEscExit: true
@@ -34,7 +34,7 @@ export function sanitizeSettings(settings: DeskPetSettings): DeskPetSettings {
     ...settings,
     focusMinutes: clampInteger(settings.focusMinutes, 5, 180),
     breakMinutes: clampInteger(settings.breakMinutes, 1, 60),
-    breakPetCount: clampInteger(settings.breakPetCount, 1, 260),
+    breakPetCount: clampInteger(settings.breakPetCount, 1, 200),
     workStart: normalizeTime(settings.workStart, DEFAULT_SETTINGS.workStart),
     workEnd: normalizeTime(settings.workEnd, DEFAULT_SETTINGS.workEnd)
   };
