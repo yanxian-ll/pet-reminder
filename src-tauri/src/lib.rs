@@ -18,9 +18,10 @@ pub fn run() {
 
                 let break_now = MenuItem::with_id(app, "break-now", "立即休息", true, None::<&str>)?;
                 let extend_break = MenuItem::with_id(app, "extend-break-1", "再休息 1 分钟", true, None::<&str>)?;
+                let show_panel = MenuItem::with_id(app, "show-panel", "显示面板", true, None::<&str>)?;
                 let settings = MenuItem::with_id(app, "toggle-settings", "设置", true, None::<&str>)?;
                 let quit = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
-                let menu = Menu::with_items(app, &[&break_now, &extend_break, &settings, &quit])?;
+                let menu = Menu::with_items(app, &[&break_now, &extend_break, &show_panel, &settings, &quit])?;
 
                 TrayIconBuilder::new()
                     .tooltip("桌宠提醒休息")
