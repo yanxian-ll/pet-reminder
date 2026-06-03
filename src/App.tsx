@@ -346,9 +346,14 @@ function CompanionPanel(props: {
       props.onStartDrag();
     }}>
       <div className="pet-card">
-        <button className="icon-button settings-button" onClick={props.onTogglePanel} title="设置">
+        <button className="icon-button settings-button" onClick={props.onTogglePanel} title="设置" aria-label="设置">
           ⚙️
         </button>
+        {props.mode === 'work' && (
+          <button className="icon-button hide-button" onClick={props.onHideWorkPanel} title="隐藏面板" aria-label="隐藏面板">
+            🙈
+          </button>
+        )}
         <div className="single-pet" aria-label="桌宠">🐱</div>
         <div className="speech">
           <strong>{props.statusText}</strong>
@@ -362,9 +367,6 @@ function CompanionPanel(props: {
         </div>
         <div className="actions single-action">
           <button onClick={props.onStartBreak}>立即休息</button>
-          {props.mode === 'work' && (
-            <button onClick={props.onHideWorkPanel}>隐藏面板</button>
-          )}
         </div>
       </div>
 

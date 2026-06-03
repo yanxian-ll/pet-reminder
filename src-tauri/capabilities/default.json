@@ -12,6 +12,7 @@
     "core:window:allow-set-decorations",
     "core:window:allow-set-resizable",
     "core:window:allow-show",
+    "core:window:allow-hide",
     "core:window:allow-set-focus",
     "core:window:allow-start-dragging",
     "autostart:allow-enable",
