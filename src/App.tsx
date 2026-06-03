@@ -217,6 +217,10 @@ export default function App() {
         case 'extend-break-1':
           extendBreak(1);
           break;
+        case 'show-panel':
+          setPanelOpen(false);
+          void applyWindowMode(modeRef.current, false);
+          break;
         case 'toggle-settings':
           setPanelOpen((open) => {
             const next = !open;
@@ -269,6 +273,16 @@ export default function App() {
     updateSettings({ workDays: nextDays });
   };
 
+  const hideWorkPanel = useCallback(() => {
+    if (modeRef.current !== 'work') return;
+    setPanelOpen(false);
+
+    if (!isTauriRuntime()) return;
+    void getCurrentWindow().hide().catch((error) => {
+      console.warn('Failed to hide work panel:', error);
+    });
+  }, []);
+
   const statusText = mode === 'break'
     ? '休息模式'
     : mode === 'work'
@@ -292,6 +306,7 @@ export default function App() {
           panelOpen={panelOpen}
           settings={settings}
           onStartBreak={() => startBreak()}
+          onHideWorkPanel={hideWorkPanel}
           onTogglePanel={() => {
             const next = !panelOpen;
             setPanelOpen(next);
@@ -317,6 +332,7 @@ function CompanionPanel(props: {
   panelOpen: boolean;
   settings: DeskPetSettings;
   onStartBreak: () => void;
+  onHideWorkPanel: () => void;
   onTogglePanel: () => void;
   onStartDrag: () => void;
   onToggleAutoStart: () => void;
@@ -346,6 +362,9 @@ function CompanionPanel(props: {
         </div>
         <div className="actions single-action">
           <button onClick={props.onStartBreak}>立即休息</button>
+          {props.mode === 'work' && (
+            <button onClick={props.onHideWorkPanel}>隐藏面板</button>
+          )}
         </div>
       </div>
 
