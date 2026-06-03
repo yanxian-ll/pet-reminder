@@ -9,3 +9,9 @@
 .break-message {
   box-shadow: none;
 }
+
+.hide-button {
+  position: absolute;
+  right: 10px;
+  top: 52px;
+}
