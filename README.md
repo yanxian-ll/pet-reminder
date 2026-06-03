@@ -109,7 +109,7 @@ npm run tauri:dev
 ## Build a Windows Installer
 
 ```powershell
-npm run tauri:build
+npm run tauri:build -- --no-bundle
 ```
 
 Build output is usually created under:
