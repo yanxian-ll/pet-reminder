@@ -127,14 +127,29 @@ export default function App() {
     }
   }, [panelOpen]);
 
+  const hideCompanionWindow = useCallback((reason = 'companion window') => {
+    setPanelOpen(false);
+
+    if (!isTauriRuntime()) return;
+    void getCurrentWindow().hide().catch((error) => {
+      console.warn(`Failed to hide ${reason}:`, error);
+    });
+  }, []);
+
   const startWork = useCallback(() => {
     const now = new Date();
     const nextMode: PetMode = isInsideWorkWindow(now, settingsRef.current) ? 'work' : 'idle';
     setMode(nextMode);
     setPhaseEnd(Date.now() + settingsRef.current.focusMinutes * 60_000);
     setSalt((value) => value + 1);
+
+    if (nextMode === 'idle') {
+      hideCompanionWindow('idle panel');
+      return;
+    }
+
     void applyWindowMode(nextMode);
-  }, [applyWindowMode]);
+  }, [applyWindowMode, hideCompanionWindow]);
 
   const startBreak = useCallback((minutes = settingsRef.current.breakMinutes) => {
     setMode('break');
@@ -180,9 +195,9 @@ export default function App() {
       if (!insideWork && currentMode !== 'break') {
         if (currentMode !== 'idle') {
           setMode('idle');
-          void applyWindowMode('idle');
         }
         setRemainingSeconds(0);
+        hideCompanionWindow('idle panel');
         return;
       }
 
@@ -204,7 +219,7 @@ export default function App() {
     }, 1000);
 
     return () => window.clearInterval(timer);
-  }, [applyWindowMode, startBreak, startWork]);
+  }, [hideCompanionWindow, startBreak, startWork]);
 
   useEffect(() => {
     if (!isTauriRuntime()) return;
@@ -275,13 +290,8 @@ export default function App() {
 
   const hideWorkPanel = useCallback(() => {
     if (modeRef.current !== 'work') return;
-    setPanelOpen(false);
-
-    if (!isTauriRuntime()) return;
-    void getCurrentWindow().hide().catch((error) => {
-      console.warn('Failed to hide work panel:', error);
-    });
-  }, []);
+    hideCompanionWindow('work panel');
+  }, [hideCompanionWindow]);
 
   const statusText = mode === 'break'
     ? '休息模式'
