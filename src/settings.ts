@@ -37,7 +37,8 @@ export function sanitizeSettings(settings: DeskPetSettings): DeskPetSettings {
     breakPetCount: clampInteger(settings.breakPetCount, 60, 200),
     workStart: normalizeTime(settings.workStart, DEFAULT_SETTINGS.workStart),
     workEnd: normalizeTime(settings.workEnd, DEFAULT_SETTINGS.workEnd),
-    strictBreakOverlay: true
+    strictBreakOverlay: true,
+    allowEscExit: true
   };
 }
 
