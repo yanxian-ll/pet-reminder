@@ -36,7 +36,8 @@ export function sanitizeSettings(settings: DeskPetSettings): DeskPetSettings {
     breakMinutes: clampInteger(settings.breakMinutes, 1, 60),
     breakPetCount: clampInteger(settings.breakPetCount, 60, 200),
     workStart: normalizeTime(settings.workStart, DEFAULT_SETTINGS.workStart),
-    workEnd: normalizeTime(settings.workEnd, DEFAULT_SETTINGS.workEnd)
+    workEnd: normalizeTime(settings.workEnd, DEFAULT_SETTINGS.workEnd),
+    strictBreakOverlay: true
   };
 }
 
@@ -46,5 +47,11 @@ function clampInteger(value: number, min: number, max: number) {
 }
 
 function normalizeTime(value: string, fallback: string) {
-  return /^([01]\d|2[0-3]):[0-5]\d$/.test(value) ? value : fallback;
+  const parts = value.split(':');
+  if (parts.length !== 2) return fallback;
+  const hour = Number(parts[0]);
+  const minute = Number(parts[1]);
+  if (!Number.isInteger(hour) || !Number.isInteger(minute)) return fallback;
+  if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return fallback;
+  return `${parts[0].padStart(2, '0')}:${parts[1].padStart(2, '0')}`;
 }
