@@ -70,8 +70,8 @@ button {
 
 .hide-button {
   position: absolute;
-  left: 10px;
-  top: 10px;
+  right: 10px;
+  top: 52px;
 }
 
 .icon-button {
@@ -146,9 +146,33 @@ button {
   backdrop-filter: blur(16px);
 }
 
+.settings-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
 .settings-panel h2 {
-  margin: 0 0 10px;
+  margin: 0;
   font-size: 18px;
+}
+
+.settings-close-button {
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  background: #e2e8f0;
+  color: #0f172a;
+  font-size: 20px;
+  line-height: 1;
+  display: grid;
+  place-items: center;
+}
+
+.settings-close-button:hover {
+  background: #cbd5e1;
 }
 
 .field-grid {

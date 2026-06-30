@@ -452,7 +452,19 @@ function CompanionPanel(props: {
 
       {props.panelOpen && (
         <div className="settings-panel">
-          <h2>提醒设置</h2>
+          <div className="settings-header">
+            <h2>提醒设置</h2>
+            <button
+              type="button"
+              className="settings-close-button"
+              onClick={props.onTogglePanel}
+              title="关闭设置"
+              aria-label="关闭设置"
+            >
+              ×
+            </button>
+          </div>
+
           <div className="field-grid">
             <label>
               <span>工作开始</span>
