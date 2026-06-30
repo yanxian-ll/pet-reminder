@@ -9,9 +9,17 @@ export interface DeskPetSettings {
   focusMinutes: number;
   breakMinutes: number;
   breakPetCount: number;
+  eventReminders: EventReminder[];
   autoStart: boolean;
   strictBreakOverlay: boolean;
   allowEscExit: boolean;
+}
+
+export interface EventReminder {
+  id: string;
+  time: string;
+  title: string;
+  enabled: boolean;
 }
 
 export interface FloatingPetSeed {

@@ -1,4 +1,4 @@
-import type { DeskPetSettings } from './types';
+import type { DeskPetSettings, EventReminder } from './types';
 
 export const DEFAULT_SETTINGS: DeskPetSettings = {
   workDays: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'],
@@ -7,6 +7,7 @@ export const DEFAULT_SETTINGS: DeskPetSettings = {
   focusMinutes: 20,
   breakMinutes: 2,
   breakPetCount: 60,
+  eventReminders: [],
   autoStart: false,
   strictBreakOverlay: true,
   allowEscExit: true
@@ -37,6 +38,7 @@ export function sanitizeSettings(settings: DeskPetSettings): DeskPetSettings {
     breakPetCount: clampInteger(settings.breakPetCount, 60, 200),
     workStart: normalizeTime(settings.workStart, DEFAULT_SETTINGS.workStart),
     workEnd: normalizeTime(settings.workEnd, DEFAULT_SETTINGS.workEnd),
+    eventReminders: normalizeEventReminders(settings.eventReminders),
     strictBreakOverlay: true,
     allowEscExit: true
   };
@@ -55,4 +57,22 @@ function normalizeTime(value: string, fallback: string) {
   if (!Number.isInteger(hour) || !Number.isInteger(minute)) return fallback;
   if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return fallback;
   return `${parts[0].padStart(2, '0')}:${parts[1].padStart(2, '0')}`;
+}
+
+function normalizeEventReminders(value: EventReminder[] | undefined) {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .map((reminder, index) => {
+      const title = typeof reminder.title === 'string' ? reminder.title.trim().slice(0, 40) : '';
+
+      return {
+        id: typeof reminder.id === 'string' && reminder.id ? reminder.id : `event-${index}`,
+        time: normalizeTime(reminder.time, '09:00'),
+        title: title || '未命名事件',
+        enabled: reminder.enabled !== false
+      };
+    })
+    .filter((reminder): reminder is EventReminder => Boolean(reminder))
+    .slice(0, 12);
 }

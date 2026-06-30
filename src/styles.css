@@ -68,6 +68,12 @@ button {
   top: 10px;
 }
 
+.hide-button {
+  position: absolute;
+  left: 10px;
+  top: 10px;
+}
+
 .icon-button {
   width: 34px;
   height: 34px;
@@ -130,6 +136,8 @@ button {
   position: absolute;
   inset: 12px;
   margin-top: 222px;
+  max-height: calc(100% - 246px);
+  overflow-y: auto;
   padding: 14px;
   border-radius: 24px;
   background: rgba(255, 255, 255, 0.93);
@@ -165,6 +173,77 @@ button {
   padding: 8px;
   background: #f8fafc;
   color: #0f172a;
+}
+
+.event-reminders {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.section-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13px;
+  color: #334155;
+  font-weight: 700;
+}
+
+.section-title button {
+  padding: 6px 10px;
+  border-radius: 12px;
+  background: #0f172a;
+  color: #fff;
+  font-size: 12px;
+}
+
+.empty-reminders {
+  margin: 0;
+  padding: 9px 10px;
+  border-radius: 12px;
+  background: #f8fafc;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.event-reminder-row {
+  display: grid;
+  grid-template-columns: 78px 1fr 36px 28px;
+  gap: 6px;
+  align-items: center;
+}
+
+.event-reminder-row input {
+  min-width: 0;
+  box-sizing: border-box;
+  border: 1px solid #cbd5e1;
+  border-radius: 12px;
+  padding: 7px 8px;
+  background: #f8fafc;
+  color: #0f172a;
+  font-size: 12px;
+}
+
+.mini-toggle,
+.delete-reminder {
+  height: 32px;
+  border-radius: 12px;
+  background: #e2e8f0;
+  color: #475569;
+  font-size: 12px;
+}
+
+.mini-toggle.on {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.delete-reminder {
+  background: #fee2e2;
+  color: #991b1b;
+  font-size: 18px;
+  line-height: 1;
 }
 
 .range-field {
