@@ -226,9 +226,11 @@ export default function App() {
       if (!insideWork && currentMode !== 'break') {
         if (currentMode !== 'idle') {
           setMode('idle');
+          setPanelOpen(false);
+          void applyWindowMode('idle', false);
         }
+
         setRemainingSeconds(0);
-        void applyWindowMode('idle', false);
         return;
       }
 
