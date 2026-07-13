@@ -103,7 +103,6 @@ export function SettingsPanel(props: {
         </label>
         <div className="switches">
           <SwitchRow label="休息时半透明遮罩" checked={props.settings.strictBreakOverlay} onChange={() => props.onUpdateSettings({ strictBreakOverlay: !props.settings.strictBreakOverlay })} />
-          <SwitchRow label="数字键退出休息模式" checked={props.settings.allowShortcutExit} onChange={() => props.onUpdateSettings({ allowShortcutExit: !props.settings.allowShortcutExit })} />
           <SwitchRow label="显示系统通知" checked={props.settings.notificationsEnabled} onChange={() => props.onUpdateSettings({ notificationsEnabled: !props.settings.notificationsEnabled })} />
         </div>
       </section>

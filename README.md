@@ -12,10 +12,9 @@ During work time, the app keeps one small desktop pet on screen. During break ti
 - Default schedule: 20 minutes of work, then 2 minutes of rest.
 - Default break pet count: 60 pets.
 - Break reminder sound when rest starts.
-- Break controls: extend rest by 1 minute or 5 minutes.
-- Random numeric shortcut for leaving break mode. Each break shows a random digit, such as `7`; press that digit to return to work.
+- Break controls only allow extending rest by 1 minute or 5 minutes; the overlay returns to work automatically when the countdown finishes.
 - Optional auto-start on Windows login.
-- System tray menu: start break now, extend break by 1 minute, settings, and quit.
+- System tray menu: start break now, pause or resume, enable temporary do-not-disturb, settings, and quit.
 
 ## Requirements
 
@@ -164,4 +163,4 @@ Some Windows audio devices or privacy settings can block browser audio until the
 
 ## Safety Notes
 
-The app keeps a visible quit option in the system tray. The random numeric shortcut exists so you can still leave break mode when needed, but it is less automatic than pressing Esc every time.
+The break overlay intentionally does not expose a shortcut, immediate-end button, or postpone action. It returns to work only after the configured countdown completes. The system tray still retains the application quit command as an emergency escape hatch.

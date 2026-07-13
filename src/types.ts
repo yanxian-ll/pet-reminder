@@ -12,7 +12,6 @@ export interface DeskPetSettings {
   eventReminders: EventReminder[];
   autoStart: boolean;
   strictBreakOverlay: boolean;
-  allowShortcutExit: boolean;
   notificationsEnabled: boolean;
   idleResetEnabled: boolean;
   idleResetMinutes: number;
