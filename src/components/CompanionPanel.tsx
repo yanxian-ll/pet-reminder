@@ -48,7 +48,13 @@ export function CompanionPanel(props: {
       else setBreakMinutes(String(fallback));
       return;
     }
-    props.onUpdateSettings({ [key]: parsed });
+
+    const minimum = key === 'focusMinutes' ? 5 : 1;
+    const maximum = key === 'focusMinutes' ? 180 : 60;
+    const normalized = Math.min(maximum, Math.max(minimum, Math.round(parsed)));
+    if (key === 'focusMinutes') setFocusMinutes(String(normalized));
+    else setBreakMinutes(String(normalized));
+    props.onUpdateSettings({ [key]: normalized });
   };
 
   return (
