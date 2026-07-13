@@ -1,4 +1,4 @@
-export type PetMode = 'idle' | 'work' | 'break';
+export type PetMode = 'idle' | 'work' | 'break' | 'paused';
 
 export type Weekday = 'Mon' | 'Tue' | 'Wed' | 'Thu' | 'Fri' | 'Sat' | 'Sun';
 
@@ -13,6 +13,9 @@ export interface DeskPetSettings {
   autoStart: boolean;
   strictBreakOverlay: boolean;
   allowShortcutExit: boolean;
+  notificationsEnabled: boolean;
+  idleResetEnabled: boolean;
+  idleResetMinutes: number;
 }
 
 export interface EventReminder {
