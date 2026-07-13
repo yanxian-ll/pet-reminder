@@ -10,7 +10,6 @@ export const DEFAULT_SETTINGS: DeskPetSettings = {
   eventReminders: [],
   autoStart: false,
   strictBreakOverlay: true,
-  allowShortcutExit: true,
   notificationsEnabled: true,
   idleResetEnabled: true,
   idleResetMinutes: 3
@@ -18,17 +17,24 @@ export const DEFAULT_SETTINGS: DeskPetSettings = {
 
 const STORAGE_KEY = 'deskpet-rest-reminder.settings.v1';
 
-type LegacySettings = Partial<DeskPetSettings> & { allowEscExit?: boolean };
+type LegacySettings = Partial<DeskPetSettings> & {
+  allowEscExit?: boolean;
+  allowShortcutExit?: boolean;
+};
 
 export function loadSettings(): DeskPetSettings {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return DEFAULT_SETTINGS;
     const parsed = JSON.parse(raw) as LegacySettings;
+    const {
+      allowEscExit: _allowEscExit,
+      allowShortcutExit: _allowShortcutExit,
+      ...currentSettings
+    } = parsed;
     return sanitizeSettings({
       ...DEFAULT_SETTINGS,
-      ...parsed,
-      allowShortcutExit: parsed.allowShortcutExit ?? parsed.allowEscExit ?? DEFAULT_SETTINGS.allowShortcutExit
+      ...currentSettings
     });
   } catch {
     return DEFAULT_SETTINGS;
@@ -50,7 +56,6 @@ export function sanitizeSettings(settings: DeskPetSettings): DeskPetSettings {
     workEnd: normalizeTime(settings.workEnd, DEFAULT_SETTINGS.workEnd),
     eventReminders: normalizeEventReminders(settings.eventReminders),
     strictBreakOverlay: settings.strictBreakOverlay !== false,
-    allowShortcutExit: settings.allowShortcutExit !== false,
     notificationsEnabled: settings.notificationsEnabled !== false,
     idleResetEnabled: settings.idleResetEnabled !== false
   };
