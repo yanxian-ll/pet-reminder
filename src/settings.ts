@@ -10,17 +10,23 @@ export const DEFAULT_SETTINGS: DeskPetSettings = {
   eventReminders: [],
   autoStart: false,
   strictBreakOverlay: true,
-  allowEscExit: true
+  allowShortcutExit: true
 };
 
 const STORAGE_KEY = 'deskpet-rest-reminder.settings.v1';
+
+type LegacySettings = Partial<DeskPetSettings> & { allowEscExit?: boolean };
 
 export function loadSettings(): DeskPetSettings {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return DEFAULT_SETTINGS;
-    const parsed = JSON.parse(raw) as Partial<DeskPetSettings>;
-    return sanitizeSettings({ ...DEFAULT_SETTINGS, ...parsed });
+    const parsed = JSON.parse(raw) as LegacySettings;
+    return sanitizeSettings({
+      ...DEFAULT_SETTINGS,
+      ...parsed,
+      allowShortcutExit: parsed.allowShortcutExit ?? parsed.allowEscExit ?? DEFAULT_SETTINGS.allowShortcutExit
+    });
   } catch {
     return DEFAULT_SETTINGS;
   }
@@ -35,12 +41,12 @@ export function sanitizeSettings(settings: DeskPetSettings): DeskPetSettings {
     ...settings,
     focusMinutes: clampInteger(settings.focusMinutes, 5, 180),
     breakMinutes: clampInteger(settings.breakMinutes, 1, 60),
-    breakPetCount: clampInteger(settings.breakPetCount, 60, 200),
+    breakPetCount: clampInteger(settings.breakPetCount, 20, 150),
     workStart: normalizeTime(settings.workStart, DEFAULT_SETTINGS.workStart),
     workEnd: normalizeTime(settings.workEnd, DEFAULT_SETTINGS.workEnd),
     eventReminders: normalizeEventReminders(settings.eventReminders),
-    strictBreakOverlay: true,
-    allowEscExit: true
+    strictBreakOverlay: settings.strictBreakOverlay !== false,
+    allowShortcutExit: settings.allowShortcutExit !== false
   };
 }
 
@@ -73,6 +79,5 @@ function normalizeEventReminders(value: EventReminder[] | undefined) {
         enabled: reminder.enabled !== false
       };
     })
-    .filter((reminder): reminder is EventReminder => Boolean(reminder))
     .slice(0, 12);
 }

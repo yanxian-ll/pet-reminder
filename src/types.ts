@@ -12,7 +12,7 @@ export interface DeskPetSettings {
   eventReminders: EventReminder[];
   autoStart: boolean;
   strictBreakOverlay: boolean;
-  allowEscExit: boolean;
+  allowShortcutExit: boolean;
 }
 
 export interface EventReminder {
