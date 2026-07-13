@@ -1,25 +1,24 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { enable, disable, isEnabled } from '@tauri-apps/plugin-autostart';
+import { disable, enable, isEnabled } from '@tauri-apps/plugin-autostart';
 import { listen } from '@tauri-apps/api/event';
-import { getCurrentWindow, LogicalPosition, LogicalSize } from '@tauri-apps/api/window';
-import type { DeskPetSettings, EventReminder, PetMode, Weekday } from './types';
-import { DEFAULT_SETTINGS, loadSettings, saveSettings, sanitizeSettings } from './settings';
-import { formatDuration, isInsideWorkWindow, secondsUntil } from './time';
+import { getCurrentWindow } from '@tauri-apps/api/window';
+import { playBreakChime } from './audio';
+import { BreakScreen } from './components/BreakScreen';
+import { CompanionPanel } from './components/CompanionPanel';
 import { createPetSeeds } from './pets';
+import {
+  findDueEventReminders,
+  loadLastReminderCheck,
+  loadTriggeredReminderKeys,
+  saveLastReminderCheck,
+  saveTriggeredReminderKeys
+} from './reminderScheduler';
+import { loadSettings, saveSettings } from './settings';
+import { isInsideWorkWindow, secondsUntil } from './time';
+import type { DeskPetSettings, EventReminder, PetMode, Weekday } from './types';
+import { isTauriRuntime, windowController } from './windowController';
 
-const WEEKDAYS: Array<{ id: Weekday; label: string }> = [
-  { id: 'Mon', label: '一' },
-  { id: 'Tue', label: '二' },
-  { id: 'Wed', label: '三' },
-  { id: 'Thu', label: '四' },
-  { id: 'Fri', label: '五' },
-  { id: 'Sat', label: '六' },
-  { id: 'Sun', label: '日' }
-];
-
-function isTauriRuntime() {
-  return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
-}
+type VisibilityReason = 'visible' | 'hidden-by-user' | 'hidden-outside-work-hours';
 
 function randomDigit(previous?: string) {
   const digits = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
@@ -27,165 +26,173 @@ function randomDigit(previous?: string) {
   return candidates[Math.floor(Math.random() * candidates.length)];
 }
 
-function getTodayReminderKey(now: Date, reminderId: string) {
-  const date = [
-    now.getFullYear(),
-    String(now.getMonth() + 1).padStart(2, '0'),
-    String(now.getDate()).padStart(2, '0')
-  ].join('-');
-  return `${date}:${reminderId}`;
-}
-
-function getCurrentTimeValue(now: Date) {
-  return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-}
-
-async function playBreakChime() {
-  try {
-    const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-    if (!AudioContextClass) return;
-
-    const context = new AudioContextClass();
-    const now = context.currentTime;
-    const master = context.createGain();
-    master.gain.setValueAtTime(0.0001, now);
-    master.gain.exponentialRampToValueAtTime(0.16, now + 0.03);
-    master.gain.exponentialRampToValueAtTime(0.0001, now + 0.78);
-    master.connect(context.destination);
-
-    [660, 880, 1175].forEach((frequency, index) => {
-      const oscillator = context.createOscillator();
-      const gain = context.createGain();
-      const start = now + index * 0.16;
-      const stop = start + 0.18;
-      oscillator.type = 'sine';
-      oscillator.frequency.setValueAtTime(frequency, start);
-      gain.gain.setValueAtTime(0.0001, start);
-      gain.gain.exponentialRampToValueAtTime(0.22, start + 0.02);
-      gain.gain.exponentialRampToValueAtTime(0.0001, stop);
-      oscillator.connect(gain).connect(master);
-      oscillator.start(start);
-      oscillator.stop(stop + 0.02);
-    });
-
-    window.setTimeout(() => {
-      void context.close();
-    }, 1000);
-  } catch (error) {
-    console.warn('Break chime failed:', error);
-  }
-}
-
 export default function App() {
   const [settings, setSettingsState] = useState<DeskPetSettings>(() => loadSettings());
   const [mode, setMode] = useState<PetMode>('idle');
   const [panelOpen, setPanelOpen] = useState(false);
-  const [phaseEnd, setPhaseEnd] = useState(() => Date.now() + DEFAULT_SETTINGS.focusMinutes * 60_000);
+  const [phaseEnd, setPhaseEnd] = useState(() => Date.now() + settings.focusMinutes * 60_000);
   const [remainingSeconds, setRemainingSeconds] = useState(() => secondsUntil(phaseEnd));
   const [salt, setSalt] = useState(() => Math.floor(Math.random() * 10_000));
   const [exitDigit, setExitDigit] = useState(() => randomDigit());
   const [activeEventReminder, setActiveEventReminder] = useState<EventReminder | null>(null);
-  const modeRef = useRef<PetMode>(mode);
+
   const settingsRef = useRef(settings);
+  const modeRef = useRef<PetMode>(mode);
+  const panelOpenRef = useRef(panelOpen);
   const phaseEndRef = useRef(phaseEnd);
   const exitDigitRef = useRef(exitDigit);
-  const triggeredEventRemindersRef = useRef(new Set<string>());
+  const activeEventReminderRef = useRef<EventReminder | null>(activeEventReminder);
+  const visibilityReasonRef = useRef<VisibilityReason>('visible');
+  const pendingEventRemindersRef = useRef<EventReminder[]>([]);
+  const triggeredEventRemindersRef = useRef(loadTriggeredReminderKeys());
+  const lastReminderCheckRef = useRef(loadLastReminderCheck());
+  const lastPersistedReminderCheckRef = useRef(lastReminderCheckRef.current);
+  const initializedRef = useRef(false);
 
   const pets = useMemo(
     () => createPetSeeds(settings.breakPetCount, salt),
     [settings.breakPetCount, salt]
   );
 
-  useEffect(() => {
-    modeRef.current = mode;
-  }, [mode]);
-
-  useEffect(() => {
-    settingsRef.current = settings;
-    saveSettings(settings);
-  }, [settings]);
-
-  useEffect(() => {
-    phaseEndRef.current = phaseEnd;
-  }, [phaseEnd]);
-
-  useEffect(() => {
-    exitDigitRef.current = exitDigit;
-  }, [exitDigit]);
-
-  const applyWindowMode = useCallback(async (nextMode: PetMode, settingsPanelOpen = panelOpen) => {
-    if (!isTauriRuntime()) return;
-    const appWindow = getCurrentWindow();
-
-    try {
-      await appWindow.setAlwaysOnTop(true);
-      await appWindow.setDecorations(false);
-      await appWindow.setResizable(false);
-
-      if (nextMode === 'break') {
-        await appWindow.setSize(new LogicalSize(window.screen.width, window.screen.height));
-        await appWindow.setPosition(new LogicalPosition(0, 0));
-        await appWindow.show();
-        await appWindow.setFocus();
-        return;
-      }
-
-      const width = settingsPanelOpen ? 380 : 236;
-      const height = settingsPanelOpen ? 660 : 236;
-      const x = Math.max(16, window.screen.availWidth - width - 28);
-      const y = Math.max(16, window.screen.availHeight - height - 44);
-      await appWindow.setSize(new LogicalSize(width, height));
-      await appWindow.setPosition(new LogicalPosition(x, y));
-      await appWindow.show();
-    } catch (error) {
-      console.warn('Failed to update Tauri window:', error);
-    }
-  }, [panelOpen]);
-
-  const hideCompanionWindow = useCallback((reason = 'companion window') => {
-    setPanelOpen(false);
-
-    if (!isTauriRuntime()) return;
-    void getCurrentWindow().hide().catch((error) => {
-      console.warn(`Failed to hide ${reason}:`, error);
-    });
+  const setModeValue = useCallback((nextMode: PetMode) => {
+    modeRef.current = nextMode;
+    setMode(nextMode);
   }, []);
+
+  const setPanelOpenValue = useCallback((open: boolean) => {
+    panelOpenRef.current = open;
+    setPanelOpen(open);
+  }, []);
+
+  const setPhaseEndValue = useCallback((timestamp: number) => {
+    phaseEndRef.current = timestamp;
+    setPhaseEnd(timestamp);
+    setRemainingSeconds(secondsUntil(timestamp));
+  }, []);
+
+  const setActiveEventReminderValue = useCallback((reminder: EventReminder | null) => {
+    activeEventReminderRef.current = reminder;
+    setActiveEventReminder(reminder);
+  }, []);
+
+  const presentWindow = useCallback((nextMode: PetMode, settingsOpen: boolean, force = false) => {
+    if (nextMode === 'break') {
+      windowController.request({ presentation: 'break', focus: true });
+      return;
+    }
+
+    if (!force && visibilityReasonRef.current !== 'visible') {
+      windowController.request({ presentation: 'hidden' });
+      return;
+    }
+
+    windowController.request({ presentation: settingsOpen ? 'settings' : 'companion', focus: force });
+  }, []);
+
+  const showEventReminder = useCallback((reminder: EventReminder, playSound = true) => {
+    setActiveEventReminderValue(reminder);
+    setPanelOpenValue(false);
+    visibilityReasonRef.current = 'visible';
+    presentWindow(modeRef.current === 'break' ? 'work' : modeRef.current, false, true);
+    if (playSound) void playBreakChime();
+  }, [presentWindow, setActiveEventReminderValue, setPanelOpenValue]);
+
+  const showNextQueuedReminder = useCallback(() => {
+    const next = pendingEventRemindersRef.current.shift() ?? null;
+    if (next) {
+      showEventReminder(next);
+      return true;
+    }
+    return false;
+  }, [showEventReminder]);
 
   const startWork = useCallback(() => {
     const now = new Date();
     const nextMode: PetMode = isInsideWorkWindow(now, settingsRef.current) ? 'work' : 'idle';
-    setMode(nextMode);
-    setPhaseEnd(Date.now() + settingsRef.current.focusMinutes * 60_000);
+    setModeValue(nextMode);
+    setPanelOpenValue(false);
+    setPhaseEndValue(Date.now() + settingsRef.current.focusMinutes * 60_000);
     setSalt((value) => value + 1);
 
-    void applyWindowMode(nextMode);
-  }, [applyWindowMode]);
+    const queuedReminder = pendingEventRemindersRef.current.shift() ?? null;
+    setActiveEventReminderValue(queuedReminder);
+
+    if (queuedReminder) {
+      visibilityReasonRef.current = 'visible';
+      presentWindow(nextMode, false, true);
+      void playBreakChime();
+      return;
+    }
+
+    if (nextMode === 'idle') {
+      visibilityReasonRef.current = 'hidden-outside-work-hours';
+      windowController.request({ presentation: 'hidden' });
+      return;
+    }
+
+    visibilityReasonRef.current = 'visible';
+    presentWindow(nextMode, false);
+  }, [presentWindow, setActiveEventReminderValue, setModeValue, setPanelOpenValue, setPhaseEndValue]);
 
   const startBreak = useCallback((minutes = settingsRef.current.breakMinutes) => {
-    setMode('break');
-    setActiveEventReminder(null);
-    setPhaseEnd(Date.now() + minutes * 60_000);
-    setExitDigit((current) => randomDigit(current));
+    if (activeEventReminderRef.current) {
+      pendingEventRemindersRef.current.unshift(activeEventReminderRef.current);
+    }
+
+    setModeValue('break');
+    setActiveEventReminderValue(null);
+    setPanelOpenValue(false);
+    setPhaseEndValue(Date.now() + minutes * 60_000);
+    const nextDigit = randomDigit(exitDigitRef.current);
+    exitDigitRef.current = nextDigit;
+    setExitDigit(nextDigit);
     setSalt((value) => value + 1);
-    setPanelOpen(false);
-    void applyWindowMode('break', false);
+    visibilityReasonRef.current = 'visible';
+    presentWindow('break', false, true);
     void playBreakChime();
-  }, [applyWindowMode]);
+  }, [presentWindow, setActiveEventReminderValue, setModeValue, setPanelOpenValue, setPhaseEndValue]);
 
   const extendBreak = useCallback((minutes: number) => {
-    setMode('break');
-    setPhaseEnd((currentEnd) => Math.max(currentEnd, Date.now()) + minutes * 60_000);
-    setSalt((value) => value + 1);
-    setPanelOpen(false);
-    void applyWindowMode('break', false);
-  }, [applyWindowMode]);
+    setModeValue('break');
+    setPhaseEndValue(Math.max(phaseEndRef.current, Date.now()) + minutes * 60_000);
+    setPanelOpenValue(false);
+    visibilityReasonRef.current = 'visible';
+    presentWindow('break', false, true);
+  }, [presentWindow, setModeValue, setPanelOpenValue, setPhaseEndValue]);
+
+  const dismissEventReminder = useCallback(() => {
+    setActiveEventReminderValue(null);
+    if (showNextQueuedReminder()) return;
+
+    if (!isInsideWorkWindow(new Date(), settingsRef.current)) {
+      visibilityReasonRef.current = 'hidden-outside-work-hours';
+      windowController.request({ presentation: 'hidden' });
+      return;
+    }
+
+    visibilityReasonRef.current = 'visible';
+    presentWindow(modeRef.current, false);
+  }, [presentWindow, setActiveEventReminderValue, showNextQueuedReminder]);
 
   useEffect(() => {
+    settingsRef.current = settings;
+    const timer = window.setTimeout(() => saveSettings(settings), 400);
+    return () => window.clearTimeout(timer);
+  }, [settings]);
+
+  useEffect(() => {
+    if (initializedRef.current) return;
+    initializedRef.current = true;
+
     const init = async () => {
       if (isTauriRuntime()) {
         try {
           const auto = await isEnabled();
-          setSettingsState((value) => ({ ...value, autoStart: auto }));
+          setSettingsState((current) => {
+            const next = { ...current, autoStart: auto };
+            settingsRef.current = next;
+            return next;
+          });
         } catch (error) {
           console.warn('Autostart state unavailable:', error);
         }
@@ -199,60 +206,79 @@ export default function App() {
   useEffect(() => {
     const timer = window.setInterval(() => {
       const now = new Date();
+      const nowMs = now.getTime();
       const currentSettings = settingsRef.current;
       const currentMode = modeRef.current;
       const insideWork = isInsideWorkWindow(now, currentSettings);
-      const currentTime = getCurrentTimeValue(now);
 
-      if (now.getHours() === 0 && now.getMinutes() === 0) {
-        triggeredEventRemindersRef.current.clear();
+      const dueReminders = findDueEventReminders(
+        currentSettings.eventReminders,
+        lastReminderCheckRef.current,
+        nowMs,
+        triggeredEventRemindersRef.current
+      );
+      lastReminderCheckRef.current = nowMs;
+
+      if (nowMs - lastPersistedReminderCheckRef.current >= 30_000) {
+        saveLastReminderCheck(nowMs);
+        lastPersistedReminderCheckRef.current = nowMs;
       }
 
-      if (currentMode !== 'break') {
-        const dueReminder = currentSettings.eventReminders.find((reminder) => {
-          if (!reminder.enabled || reminder.time !== currentTime) return false;
-          return !triggeredEventRemindersRef.current.has(getTodayReminderKey(now, reminder.id));
-        });
+      if (dueReminders.length > 0) {
+        for (const due of dueReminders) {
+          triggeredEventRemindersRef.current.add(due.key);
+        }
+        saveTriggeredReminderKeys(triggeredEventRemindersRef.current);
 
-        if (dueReminder) {
-          triggeredEventRemindersRef.current.add(getTodayReminderKey(now, dueReminder.id));
-          setActiveEventReminder(dueReminder);
-          setPanelOpen(false);
-          void applyWindowMode(currentMode === 'idle' ? 'idle' : 'work', false);
-          void playBreakChime();
+        const reminders = dueReminders.map((due) => due.reminder);
+        if (currentMode === 'break' || activeEventReminderRef.current) {
+          pendingEventRemindersRef.current.push(...reminders);
+        } else {
+          const [first, ...rest] = reminders;
+          pendingEventRemindersRef.current.push(...rest);
+          showEventReminder(first);
         }
       }
 
       if (!insideWork && currentMode !== 'break') {
         if (currentMode !== 'idle') {
-          setMode('idle');
-          setPanelOpen(false);
-          void applyWindowMode('idle', false);
+          setModeValue('idle');
+          setPanelOpenValue(false);
         }
-
         setRemainingSeconds(0);
+
+        if (activeEventReminderRef.current) {
+          presentWindow('idle', false, true);
+        } else if (visibilityReasonRef.current !== 'hidden-by-user') {
+          visibilityReasonRef.current = 'hidden-outside-work-hours';
+          windowController.request({ presentation: 'hidden' });
+        }
+        return;
+      }
+
+      if (currentMode === 'idle' && insideWork) {
+        setModeValue('work');
+        setPhaseEndValue(nowMs + currentSettings.focusMinutes * 60_000);
+        if (visibilityReasonRef.current === 'hidden-outside-work-hours') {
+          visibilityReasonRef.current = 'visible';
+        }
+        presentWindow('work', panelOpenRef.current);
         return;
       }
 
       const left = secondsUntil(phaseEndRef.current);
       setRemainingSeconds(left);
-
-      if (currentMode === 'idle' && insideWork) {
-        startWork();
-        return;
-      }
-
       if (left > 0) return;
 
-      if (currentMode === 'work') {
-        startBreak();
-      } else if (currentMode === 'break') {
-        startWork();
-      }
+      if (currentMode === 'work') startBreak();
+      else if (currentMode === 'break') startWork();
     }, 1000);
 
-    return () => window.clearInterval(timer);
-  }, [applyWindowMode, startBreak, startWork]);
+    return () => {
+      window.clearInterval(timer);
+      saveLastReminderCheck(lastReminderCheckRef.current);
+    };
+  }, [presentWindow, setModeValue, setPanelOpenValue, setPhaseEndValue, showEventReminder, startBreak, startWork]);
 
   useEffect(() => {
     if (!isTauriRuntime()) return;
@@ -266,66 +292,82 @@ export default function App() {
           extendBreak(1);
           break;
         case 'show-panel':
-          setPanelOpen(false);
-          void applyWindowMode(modeRef.current, false);
+          visibilityReasonRef.current = 'visible';
+          setPanelOpenValue(false);
+          presentWindow(modeRef.current, false, true);
           break;
-        case 'toggle-settings':
-          setPanelOpen((open) => {
-            const next = !open;
-            void applyWindowMode(modeRef.current, next);
-            return next;
-          });
+        case 'toggle-settings': {
+          const next = !panelOpenRef.current;
+          visibilityReasonRef.current = 'visible';
+          setPanelOpenValue(next);
+          presentWindow(modeRef.current, next, true);
           break;
+        }
       }
     });
 
     return () => {
       void unlistenPromise.then((unlisten) => unlisten());
     };
-  }, [applyWindowMode, extendBreak, startBreak]);
+  }, [extendBreak, presentWindow, setPanelOpenValue, startBreak]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.repeat) return;
-      if (settingsRef.current.allowEscExit && modeRef.current === 'break' && event.key === exitDigitRef.current) {
+
+      if (event.key === 'Escape' && panelOpenRef.current && modeRef.current !== 'break') {
+        setPanelOpenValue(false);
+        presentWindow(modeRef.current, false);
+        return;
+      }
+
+      if (
+        settingsRef.current.allowShortcutExit &&
+        modeRef.current === 'break' &&
+        event.key === exitDigitRef.current
+      ) {
         startWork();
       }
     };
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [startWork]);
+  }, [presentWindow, setPanelOpenValue, startWork]);
 
   const updateSettings = useCallback((patch: Partial<DeskPetSettings>) => {
-    setSettingsState((current) => sanitizeSettings({ ...current, ...patch }));
+    setSettingsState((current) => {
+      const next = { ...current, ...patch };
+      settingsRef.current = next;
+      return next;
+    });
   }, []);
 
-  const addEventReminder = () => {
+  const addEventReminder = useCallback(() => {
     const nextReminder: EventReminder = {
       id: `event-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
       time: '09:00',
       title: '新的事件提醒',
       enabled: true
     };
-    updateSettings({ eventReminders: [...settings.eventReminders, nextReminder] });
-  };
+    updateSettings({ eventReminders: [...settingsRef.current.eventReminders, nextReminder] });
+  }, [updateSettings]);
 
-  const updateEventReminder = (id: string, patch: Partial<EventReminder>) => {
+  const updateEventReminder = useCallback((id: string, patch: Partial<EventReminder>) => {
     updateSettings({
-      eventReminders: settings.eventReminders.map((reminder) => (
+      eventReminders: settingsRef.current.eventReminders.map((reminder) => (
         reminder.id === id ? { ...reminder, ...patch } : reminder
       ))
     });
-  };
+  }, [updateSettings]);
 
-  const deleteEventReminder = (id: string) => {
+  const deleteEventReminder = useCallback((id: string) => {
     updateSettings({
-      eventReminders: settings.eventReminders.filter((reminder) => reminder.id !== id)
+      eventReminders: settingsRef.current.eventReminders.filter((reminder) => reminder.id !== id)
     });
-  };
+  }, [updateSettings]);
 
-  const toggleAutoStart = async () => {
-    const next = !settings.autoStart;
+  const toggleAutoStart = useCallback(async () => {
+    const next = !settingsRef.current.autoStart;
     updateSettings({ autoStart: next });
 
     if (!isTauriRuntime()) return;
@@ -336,25 +378,31 @@ export default function App() {
       console.warn('Failed to change autostart:', error);
       updateSettings({ autoStart: !next });
     }
-  };
+  }, [updateSettings]);
 
-  const toggleWeekday = (day: Weekday) => {
-    const nextDays = settings.workDays.includes(day)
-      ? settings.workDays.filter((item) => item !== day)
-      : [...settings.workDays, day];
+  const toggleWeekday = useCallback((day: Weekday) => {
+    const currentDays = settingsRef.current.workDays;
+    const nextDays = currentDays.includes(day)
+      ? currentDays.filter((item) => item !== day)
+      : [...currentDays, day];
     updateSettings({ workDays: nextDays });
-  };
+  }, [updateSettings]);
 
   const hideCompanionPanel = useCallback(() => {
     if (modeRef.current === 'break') return;
-    hideCompanionWindow('companion panel');
-  }, [hideCompanionWindow]);
+    setPanelOpenValue(false);
+    visibilityReasonRef.current = 'hidden-by-user';
+    windowController.request({ presentation: 'hidden' });
+  }, [setPanelOpenValue]);
 
-  const statusText = mode === 'break'
-    ? '休息模式'
-    : mode === 'work'
-      ? '工作陪伴中'
-      : '非工作时段';
+  const togglePanel = useCallback(() => {
+    const next = !panelOpenRef.current;
+    visibilityReasonRef.current = 'visible';
+    setPanelOpenValue(next);
+    presentWindow(modeRef.current, next, true);
+  }, [presentWindow, setPanelOpenValue]);
+
+  const statusText = mode === 'work' ? '工作陪伴中' : '非工作时段';
 
   return (
     <main className={`app mode-${mode} ${settings.strictBreakOverlay ? 'strict' : 'gentle'}`}>
@@ -362,8 +410,11 @@ export default function App() {
         <BreakScreen
           pets={pets}
           remainingSeconds={remainingSeconds}
+          exitDigit={exitDigit}
+          allowShortcutExit={settings.allowShortcutExit}
           onExtendOne={() => extendBreak(1)}
           onExtendFive={() => extendBreak(5)}
+          onEndBreak={startWork}
         />
       ) : (
         <CompanionPanel
@@ -375,12 +426,8 @@ export default function App() {
           settings={settings}
           onStartBreak={() => startBreak()}
           onHideCompanionPanel={hideCompanionPanel}
-          onDismissEventReminder={() => setActiveEventReminder(null)}
-          onTogglePanel={() => {
-            const next = !panelOpen;
-            setPanelOpen(next);
-            void applyWindowMode(mode, next);
-          }}
+          onDismissEventReminder={dismissEventReminder}
+          onTogglePanel={togglePanel}
           onStartDrag={() => {
             if (!isTauriRuntime()) return;
             void getCurrentWindow().startDragging();
@@ -394,254 +441,5 @@ export default function App() {
         />
       )}
     </main>
-  );
-}
-
-function CompanionPanel(props: {
-  mode: PetMode;
-  statusText: string;
-  remainingSeconds: number;
-  activeEventReminder: EventReminder | null;
-  panelOpen: boolean;
-  settings: DeskPetSettings;
-  onStartBreak: () => void;
-  onHideCompanionPanel: () => void;
-  onDismissEventReminder: () => void;
-  onTogglePanel: () => void;
-  onStartDrag: () => void;
-  onToggleAutoStart: () => void;
-  onUpdateSettings: (patch: Partial<DeskPetSettings>) => void;
-  onToggleWeekday: (day: Weekday) => void;
-  onAddEventReminder: () => void;
-  onUpdateEventReminder: (id: string, patch: Partial<EventReminder>) => void;
-  onDeleteEventReminder: (id: string) => void;
-}) {
-  return (
-    <section className="companion" onMouseDown={(event) => {
-      const target = event.target as HTMLElement;
-      if (target.closest('button, input, label')) return;
-      props.onStartDrag();
-    }}>
-      <div className="pet-card">
-        <button className="icon-button settings-button" onClick={props.onTogglePanel} title="设置" aria-label="设置">
-          ⚙️
-        </button>
-        {(props.mode === 'work' || props.mode === 'idle') && (
-          <button className="icon-button hide-button" onClick={props.onHideCompanionPanel} title="隐藏面板" aria-label="隐藏面板">
-            🙈
-          </button>
-        )}
-        <div className="single-pet" aria-label="桌宠">🐱</div>
-        <div className="speech">
-          <strong>{props.statusText}</strong>
-          <span>
-            {props.activeEventReminder
-              ? props.activeEventReminder.title
-              : props.mode === 'work'
-                ? `下次休息 ${formatDuration(props.remainingSeconds)}`
-                : props.mode === 'idle'
-                  ? '到工作时段我会提醒你'
-                  : '休息中'}
-          </span>
-        </div>
-        <div className="actions single-action">
-          <button onClick={props.onStartBreak}>立即休息</button>
-          {props.activeEventReminder && (
-            <button onClick={props.onDismissEventReminder}>知道了</button>
-          )}
-        </div>
-      </div>
-
-      {props.panelOpen && (
-        <div className="settings-panel">
-          <div className="settings-header">
-            <h2>提醒设置</h2>
-            <button
-              type="button"
-              className="settings-close-button"
-              onClick={props.onTogglePanel}
-              title="关闭设置"
-              aria-label="关闭设置"
-            >
-              ×
-            </button>
-          </div>
-
-          <div className="field-grid">
-            <label>
-              <span>工作开始</span>
-              <input
-                type="time"
-                value={props.settings.workStart}
-                onChange={(event) => props.onUpdateSettings({ workStart: event.currentTarget.value })}
-              />
-            </label>
-            <label>
-              <span>工作结束</span>
-              <input
-                type="time"
-                value={props.settings.workEnd}
-                onChange={(event) => props.onUpdateSettings({ workEnd: event.currentTarget.value })}
-              />
-            </label>
-            <label>
-              <span>专注分钟</span>
-              <input
-                type="number"
-                min={5}
-                max={180}
-                value={props.settings.focusMinutes}
-                onChange={(event) => props.onUpdateSettings({ focusMinutes: Number(event.currentTarget.value) })}
-              />
-            </label>
-            <label>
-              <span>休息分钟</span>
-              <input
-                type="number"
-                min={1}
-                max={60}
-                value={props.settings.breakMinutes}
-                onChange={(event) => props.onUpdateSettings({ breakMinutes: Number(event.currentTarget.value) })}
-              />
-            </label>
-          </div>
-
-          <label className="range-field">
-            <span>休息桌宠数量：{props.settings.breakPetCount}</span>
-            <input
-              type="range"
-              min={60}
-              max={200}
-              value={props.settings.breakPetCount}
-              onChange={(event) => props.onUpdateSettings({ breakPetCount: Number(event.currentTarget.value) })}
-            />
-          </label>
-
-          <div className="weekday-list" aria-label="工作日">
-            {WEEKDAYS.map((day) => (
-              <button
-                key={day.id}
-                className={props.settings.workDays.includes(day.id) ? 'selected' : ''}
-                onClick={() => props.onToggleWeekday(day.id)}
-              >
-                {day.label}
-              </button>
-            ))}
-          </div>
-
-          <div className="event-reminders">
-            <div className="section-title">
-              <span>事件提醒</span>
-              <button type="button" onClick={props.onAddEventReminder}>添加</button>
-            </div>
-            {props.settings.eventReminders.length === 0 ? (
-              <p className="empty-reminders">还没有事件提醒</p>
-            ) : (
-              props.settings.eventReminders.map((reminder) => (
-                <div className="event-reminder-row" key={reminder.id}>
-                  <input
-                    type="time"
-                    value={reminder.time}
-                    onChange={(event) => props.onUpdateEventReminder(reminder.id, { time: event.currentTarget.value })}
-                  />
-                  <input
-                    type="text"
-                    value={reminder.title}
-                    maxLength={40}
-                    onChange={(event) => props.onUpdateEventReminder(reminder.id, { title: event.currentTarget.value })}
-                    aria-label="事件内容"
-                  />
-                  <button
-                    type="button"
-                    className={reminder.enabled ? 'mini-toggle on' : 'mini-toggle'}
-                    onClick={() => props.onUpdateEventReminder(reminder.id, { enabled: !reminder.enabled })}
-                    title={reminder.enabled ? '关闭提醒' : '开启提醒'}
-                    aria-label={reminder.enabled ? '关闭提醒' : '开启提醒'}
-                  >
-                    {reminder.enabled ? '开' : '关'}
-                  </button>
-                  <button
-                    type="button"
-                    className="delete-reminder"
-                    onClick={() => props.onDeleteEventReminder(reminder.id)}
-                    title="删除提醒"
-                    aria-label="删除提醒"
-                  >
-                    ×
-                  </button>
-                </div>
-              ))
-            )}
-          </div>
-
-          <div className="switches">
-            <SwitchRow label="开机自动启动" checked={props.settings.autoStart} onChange={props.onToggleAutoStart} />
-            <SwitchRow
-              label="休息时半透明遮罩"
-              checked={props.settings.strictBreakOverlay}
-              onChange={() => props.onUpdateSettings({ strictBreakOverlay: !props.settings.strictBreakOverlay })}
-            />
-            <SwitchRow
-              label="数字键退出休息模式"
-              checked={props.settings.allowEscExit}
-              onChange={() => props.onUpdateSettings({ allowEscExit: !props.settings.allowEscExit })}
-            />
-          </div>
-        </div>
-      )}
-    </section>
-  );
-}
-
-function BreakScreen(props: {
-  pets: ReturnType<typeof createPetSeeds>;
-  remainingSeconds: number;
-  onExtendOne: () => void;
-  onExtendFive: () => void;
-}) {
-  return (
-    <section className="break-screen">
-      <div className="break-message">
-        <div className="message-pet">🐱</div>
-        <h1>休息时间到！</h1>
-        <p>站起来走一走，看看远处，喝口水。桌宠们会陪你休息。</p>
-        <strong className="countdown">{formatDuration(props.remainingSeconds)}</strong>
-        <div className="break-actions">
-          <button onClick={props.onExtendOne}>再休息 1 分钟</button>
-          <button onClick={props.onExtendFive}>再休息 5 分钟</button>
-        </div>
-      </div>
-
-      <div className="pet-cloud" aria-hidden="true">
-        {props.pets.map((pet) => (
-          <div
-            className="floating-pet"
-            key={pet.id}
-            style={{
-              left: `${pet.left}%`,
-              top: `${pet.top}%`,
-              fontSize: `${pet.size}px`,
-              animationDelay: `${pet.delay}s`,
-              animationDuration: `${pet.duration}s`,
-              rotate: `${pet.rotate}deg`
-            }}
-          >
-            <span>{pet.emoji}</span>
-            {pet.id % 7 === 0 && <em>{pet.phrase}</em>}
-          </div>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function SwitchRow(props: { label: string; checked: boolean; onChange: () => void }) {
-  return (
-    <label className="switch-row">
-      <span>{props.label}</span>
-      <button className={`switch ${props.checked ? 'on' : ''}`} onClick={props.onChange} type="button">
-        <span />
-      </button>
-    </label>
   );
 }
