@@ -27,6 +27,13 @@ button {
   cursor: pointer;
 }
 
+button:focus-visible,
+input:focus-visible,
+[role="switch"]:focus-visible {
+  outline: 3px solid rgba(37, 99, 235, 0.45);
+  outline-offset: 2px;
+}
+
 .app {
   width: 100vw;
   height: 100vh;
@@ -34,6 +41,7 @@ button {
 }
 
 .companion {
+  position: relative;
   width: 100%;
   height: 100%;
   display: grid;
@@ -48,9 +56,8 @@ button {
   border-radius: 30px;
   padding: 14px;
   box-sizing: border-box;
-  background: rgba(255, 255, 255, 0.86);
+  background: rgba(255, 255, 255, 0.9);
   border: 1px solid rgba(148, 163, 184, 0.32);
-  box-shadow: 0 20px 60px rgba(15, 23, 42, 0.24);
   backdrop-filter: blur(14px);
   display: grid;
   justify-items: center;
@@ -59,33 +66,56 @@ button {
 }
 
 .mode-idle .pet-card {
-  opacity: 0.82;
+  opacity: 0.84;
+}
+
+.drag-handle {
+  position: absolute;
+  top: 5px;
+  left: 50%;
+  width: 46px;
+  height: 8px;
+  transform: translateX(-50%);
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.34);
+  cursor: grab;
+}
+
+.drag-handle:active,
+.single-pet:active {
+  cursor: grabbing;
 }
 
 .settings-button {
   position: absolute;
   right: 10px;
-  top: 10px;
+  top: 12px;
 }
 
 .hide-button {
   position: absolute;
   right: 10px;
-  top: 52px;
+  top: 54px;
 }
 
 .icon-button {
-  width: 34px;
-  height: 34px;
+  width: 38px;
+  height: 38px;
   border-radius: 999px;
-  background: rgba(241, 245, 249, 0.92);
+  background: rgba(241, 245, 249, 0.94);
   box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.25);
+  transition: transform 140ms ease, background 140ms ease;
+}
+
+.icon-button:hover {
+  transform: translateY(-1px);
+  background: #e2e8f0;
 }
 
 .single-pet {
   font-size: 72px;
   line-height: 1;
-  filter: drop-shadow(0 12px 20px rgba(15, 23, 42, 0.22));
+  cursor: grab;
   animation: bob 2.4s ease-in-out infinite;
 }
 
@@ -104,30 +134,39 @@ button {
 }
 
 .speech span {
-  font-size: 12px;
+  max-width: 160px;
+  overflow: hidden;
   color: #64748b;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.actions {
+.actions,
+.break-actions {
   display: flex;
   gap: 8px;
-}
-
-.actions.single-action {
+  flex-wrap: wrap;
   justify-content: center;
 }
 
 .actions button,
 .break-actions button {
-  padding: 8px 12px;
+  min-height: 38px;
+  padding: 8px 13px;
   border-radius: 999px;
   background: #0f172a;
   color: white;
-  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.18);
+  transition: transform 140ms ease, opacity 140ms ease;
+}
+
+.actions button:hover,
+.break-actions button:hover {
+  transform: translateY(-1px);
 }
 
 .actions button:nth-child(2),
-.break-actions button:nth-child(2) {
+.break-actions .secondary-action {
   background: #e2e8f0;
   color: #0f172a;
 }
@@ -140,18 +179,25 @@ button {
   overflow-y: auto;
   padding: 14px;
   border-radius: 24px;
-  background: rgba(255, 255, 255, 0.93);
+  box-sizing: border-box;
+  background: rgba(255, 255, 255, 0.96);
   border: 1px solid rgba(148, 163, 184, 0.26);
-  box-shadow: 0 20px 70px rgba(15, 23, 42, 0.24);
   backdrop-filter: blur(16px);
+  animation: panel-in 160ms ease-out;
 }
 
 .settings-header {
+  position: sticky;
+  top: -14px;
+  z-index: 2;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 10px;
+  margin: -14px -14px 10px;
+  padding: 14px;
+  background: rgba(255, 255, 255, 0.97);
+  border-bottom: 1px solid rgba(148, 163, 184, 0.18);
 }
 
 .settings-panel h2 {
@@ -160,15 +206,15 @@ button {
 }
 
 .settings-close-button {
-  width: 30px;
-  height: 30px;
+  width: 36px;
+  height: 36px;
   border-radius: 999px;
-  background: #e2e8f0;
-  color: #0f172a;
-  font-size: 20px;
-  line-height: 1;
   display: grid;
   place-items: center;
+  background: #e2e8f0;
+  color: #0f172a;
+  font-size: 22px;
+  line-height: 1;
 }
 
 .settings-close-button:hover {
@@ -185,18 +231,44 @@ button {
 .range-field {
   display: grid;
   gap: 5px;
-  font-size: 12px;
   color: #475569;
+  font-size: 12px;
 }
 
-.field-grid input {
+.field-grid input,
+.event-reminder-row input {
   width: 100%;
+  min-width: 0;
   box-sizing: border-box;
   border: 1px solid #cbd5e1;
   border-radius: 12px;
   padding: 8px;
   background: #f8fafc;
   color: #0f172a;
+}
+
+.range-field {
+  margin-top: 12px;
+}
+
+.weekday-list {
+  margin: 12px 0;
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 5px;
+}
+
+.weekday-list button {
+  min-width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  background: #e2e8f0;
+  color: #334155;
+}
+
+.weekday-list button.selected {
+  background: #0f172a;
+  color: #fff;
 }
 
 .event-reminders {
@@ -209,13 +281,14 @@ button {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-size: 13px;
   color: #334155;
+  font-size: 13px;
   font-weight: 700;
 }
 
 .section-title button {
-  padding: 6px 10px;
+  min-height: 34px;
+  padding: 6px 11px;
   border-radius: 12px;
   background: #0f172a;
   color: #fff;
@@ -233,25 +306,19 @@ button {
 
 .event-reminder-row {
   display: grid;
-  grid-template-columns: 78px 1fr 36px 28px;
+  grid-template-columns: 78px 1fr 38px 34px;
   gap: 6px;
   align-items: center;
 }
 
 .event-reminder-row input {
-  min-width: 0;
-  box-sizing: border-box;
-  border: 1px solid #cbd5e1;
-  border-radius: 12px;
   padding: 7px 8px;
-  background: #f8fafc;
-  color: #0f172a;
   font-size: 12px;
 }
 
 .mini-toggle,
 .delete-reminder {
-  height: 32px;
+  height: 34px;
   border-radius: 12px;
   background: #e2e8f0;
   color: #475569;
@@ -270,57 +337,36 @@ button {
   line-height: 1;
 }
 
-.range-field {
-  margin-top: 12px;
-}
-
-.weekday-list {
-  margin: 12px 0;
-  display: grid;
-  grid-template-columns: repeat(7, 1fr);
-  gap: 5px;
-}
-
-.weekday-list button {
-  height: 34px;
-  border-radius: 12px;
-  background: #e2e8f0;
-  color: #334155;
-}
-
-.weekday-list button.selected {
-  background: #0f172a;
-  color: #fff;
-}
-
 .switches {
   display: grid;
   gap: 8px;
 }
 
 .switch-row {
+  min-height: 36px;
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 12px;
   font-size: 13px;
 }
 
 .switch {
-  width: 46px;
-  height: 26px;
-  padding: 3px;
+  width: 48px;
+  height: 28px;
+  padding: 4px;
   border-radius: 999px;
   background: #cbd5e1;
-  transition: 0.2s ease;
+  transition: background 180ms ease;
 }
 
-.switch span {
+.switch > span {
   display: block;
   width: 20px;
   height: 20px;
   border-radius: 999px;
   background: white;
-  transition: 0.2s ease;
+  transition: transform 180ms ease;
   box-shadow: 0 3px 10px rgba(15, 23, 42, 0.2);
 }
 
@@ -328,7 +374,7 @@ button {
   background: #16a34a;
 }
 
-.switch.on span {
+.switch.on > span {
   transform: translateX(20px);
 }
 
@@ -357,10 +403,10 @@ button {
   width: min(440px, calc(100vw - 40px));
   padding: 28px;
   border-radius: 34px;
+  box-sizing: border-box;
   text-align: center;
-  background: rgba(255, 255, 255, 0.68);
+  background: rgba(255, 255, 255, 0.78);
   border: 1px solid rgba(148, 163, 184, 0.28);
-  box-shadow: 0 24px 100px rgba(15, 23, 42, 0.2);
   backdrop-filter: blur(10px);
 }
 
@@ -381,28 +427,34 @@ button {
   line-height: 1.7;
 }
 
-.shortcut-note {
-  display: inline-block;
-  padding: 7px 12px;
-  border-radius: 999px;
-  background: rgba(254, 226, 226, 0.76);
-  color: #991b1b !important;
-  font-weight: 800;
-}
-
 .countdown {
   display: block;
+  margin-bottom: 12px;
   font-variant-numeric: tabular-nums;
   font-size: clamp(34px, 6vw, 72px);
   letter-spacing: 0.04em;
-  margin-bottom: 16px;
 }
 
-.break-actions {
-  display: flex;
-  justify-content: center;
-  gap: 10px;
-  flex-wrap: wrap;
+.break-message .shortcut-note {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0 auto 16px;
+  padding: 7px 12px;
+  border-radius: 999px;
+  background: rgba(254, 226, 226, 0.84);
+  color: #991b1b;
+  font-weight: 700;
+}
+
+.shortcut-note kbd {
+  min-width: 24px;
+  padding: 2px 7px;
+  border-radius: 7px;
+  background: #fff;
+  border: 1px solid rgba(153, 27, 27, 0.22);
+  font-family: inherit;
+  font-size: 1.05em;
 }
 
 .pet-cloud {
@@ -418,7 +470,7 @@ button {
   animation-name: wiggle;
   animation-timing-function: ease-in-out;
   animation-iteration-count: infinite;
-  filter: drop-shadow(0 12px 16px rgba(15, 23, 42, 0.16));
+  will-change: transform;
 }
 
 .floating-pet span {
@@ -436,7 +488,17 @@ button {
   color: #0f172a;
   font-size: 12px;
   font-style: normal;
-  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.14);
+}
+
+@keyframes panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 @keyframes bob {
@@ -453,6 +515,17 @@ button {
     transform: translate(-50%, -50%) translateY(0) scale(1);
   }
   50% {
-    transform: translate(-50%, -50%) translateY(-18px) scale(1.08);
+    transform: translate(-50%, -50%) translateY(-18px) scale(1.06);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }
