@@ -27,26 +27,18 @@ import { isTauriRuntime, windowController } from './windowController';
 type VisibilityReason = 'visible' | 'hidden-by-user' | 'hidden-outside-work-hours';
 interface SnoozedReminder { reminder: EventReminder; dueAt: number }
 
-function randomDigit(previous?: string) {
-  const digits = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
-  const candidates = previous ? digits.filter((digit) => digit !== previous) : digits;
-  return candidates[Math.floor(Math.random() * candidates.length)];
-}
-
 export default function App() {
   const [settings, setSettingsState] = useState<DeskPetSettings>(() => loadSettings());
   const [mode, setMode] = useState<PetMode>('idle');
   const [phaseEnd, setPhaseEnd] = useState(() => Date.now() + settings.focusMinutes * 60_000);
   const [remainingSeconds, setRemainingSeconds] = useState(() => secondsUntil(phaseEnd));
   const [salt, setSalt] = useState(() => Math.floor(Math.random() * 10_000));
-  const [exitDigit, setExitDigit] = useState(() => randomDigit());
   const [activeEventReminder, setActiveEventReminder] = useState<EventReminder | null>(null);
   const [doNotDisturbUntil, setDoNotDisturbUntil] = useState(() => loadDoNotDisturbUntil());
 
   const settingsRef = useRef(settings);
   const modeRef = useRef<PetMode>(mode);
   const phaseEndRef = useRef(phaseEnd);
-  const exitDigitRef = useRef(exitDigit);
   const activeEventReminderRef = useRef<EventReminder | null>(activeEventReminder);
   const visibilityReasonRef = useRef<VisibilityReason>('visible');
   const pendingEventRemindersRef = useRef<EventReminder[]>([]);
@@ -148,9 +140,6 @@ export default function App() {
     setModeValue('break');
     setActiveEventReminderValue(null);
     setPhaseEndValue(nowMs + minutes * 60_000);
-    const nextDigit = randomDigit(exitDigitRef.current);
-    exitDigitRef.current = nextDigit;
-    setExitDigit(nextDigit);
     setSalt((value) => value + 1);
     visibilityReasonRef.current = 'visible';
     presentWindow('break', true);
@@ -164,11 +153,6 @@ export default function App() {
     visibilityReasonRef.current = 'visible';
     presentWindow('break', true);
   }, [presentWindow, setModeValue, setPhaseEndValue]);
-
-  const snoozeBreak = useCallback((minutes = 10) => {
-    setDoNotDisturbUntilValue(0);
-    startWork(minutes);
-  }, [setDoNotDisturbUntilValue, startWork]);
 
   const pauseToggle = useCallback(() => {
     if (modeRef.current === 'work') {
@@ -373,15 +357,6 @@ export default function App() {
     };
   }, [handleCommand]);
 
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.repeat) return;
-      if (settingsRef.current.allowShortcutExit && modeRef.current === 'break' && event.key === exitDigitRef.current) startWork();
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [startWork]);
-
   const tooltip = useMemo(() => {
     if (mode === 'break') return `休息中 · ${formatDuration(remainingSeconds)}`;
     if (mode === 'paused') return `已暂停 · 剩余 ${Math.ceil(remainingSeconds / 60)} 分钟`;
@@ -402,12 +377,8 @@ export default function App() {
         <BreakScreen
           pets={pets}
           remainingSeconds={remainingSeconds}
-          exitDigit={exitDigit}
-          allowShortcutExit={settings.allowShortcutExit}
           onExtendOne={() => extendBreak(1)}
           onExtendFive={() => extendBreak(5)}
-          onSnoozeBreak={() => snoozeBreak(10)}
-          onEndBreak={() => startWork()}
         />
       ) : (
         <CompanionPanel
