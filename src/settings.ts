@@ -10,7 +10,10 @@ export const DEFAULT_SETTINGS: DeskPetSettings = {
   eventReminders: [],
   autoStart: false,
   strictBreakOverlay: true,
-  allowShortcutExit: true
+  allowShortcutExit: true,
+  notificationsEnabled: true,
+  idleResetEnabled: true,
+  idleResetMinutes: 3
 };
 
 const STORAGE_KEY = 'deskpet-rest-reminder.settings.v1';
@@ -42,11 +45,14 @@ export function sanitizeSettings(settings: DeskPetSettings): DeskPetSettings {
     focusMinutes: clampInteger(settings.focusMinutes, 5, 180),
     breakMinutes: clampInteger(settings.breakMinutes, 1, 60),
     breakPetCount: clampInteger(settings.breakPetCount, 20, 150),
+    idleResetMinutes: clampInteger(settings.idleResetMinutes, 1, 60),
     workStart: normalizeTime(settings.workStart, DEFAULT_SETTINGS.workStart),
     workEnd: normalizeTime(settings.workEnd, DEFAULT_SETTINGS.workEnd),
     eventReminders: normalizeEventReminders(settings.eventReminders),
     strictBreakOverlay: settings.strictBreakOverlay !== false,
-    allowShortcutExit: settings.allowShortcutExit !== false
+    allowShortcutExit: settings.allowShortcutExit !== false,
+    notificationsEnabled: settings.notificationsEnabled !== false,
+    idleResetEnabled: settings.idleResetEnabled !== false
   };
 }
 
@@ -71,7 +77,6 @@ function normalizeEventReminders(value: EventReminder[] | undefined) {
   return value
     .map((reminder, index) => {
       const title = typeof reminder.title === 'string' ? reminder.title.trim().slice(0, 40) : '';
-
       return {
         id: typeof reminder.id === 'string' && reminder.id ? reminder.id : `event-${index}`,
         time: normalizeTime(reminder.time, '09:00'),

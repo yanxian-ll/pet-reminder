@@ -1,6 +1,7 @@
+import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWindow, LogicalPosition, LogicalSize } from '@tauri-apps/api/window';
 
-export type WindowPresentation = 'hidden' | 'companion' | 'settings' | 'break';
+export type WindowPresentation = 'hidden' | 'companion' | 'break';
 
 interface WindowRequest {
   presentation: WindowPresentation;
@@ -16,7 +17,6 @@ class WindowController {
   request(request: WindowRequest) {
     if (!isTauriRuntime()) return;
     const requestId = ++this.latestRequestId;
-
     this.queue = this.queue
       .catch(() => undefined)
       .then(async () => {
@@ -43,11 +43,10 @@ class WindowController {
       }
 
       if (presentation === 'break') {
-        await appWindow.setSize(new LogicalSize(window.screen.width, window.screen.height));
-        await appWindow.setPosition(new LogicalPosition(0, 0));
+        await invoke('fit_main_window_to_current_monitor');
       } else {
-        const width = presentation === 'settings' ? 380 : 236;
-        const height = presentation === 'settings' ? 660 : 236;
+        const width = 236;
+        const height = 236;
         const x = Math.max(16, window.screen.availWidth - width - 28);
         const y = Math.max(16, window.screen.availHeight - height - 44);
         await appWindow.setSize(new LogicalSize(width, height));

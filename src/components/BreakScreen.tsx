@@ -9,6 +9,7 @@ export function BreakScreen(props: {
   allowShortcutExit: boolean;
   onExtendOne: () => void;
   onExtendFive: () => void;
+  onSnoozeBreak: () => void;
   onEndBreak: () => void;
 }) {
   return (
@@ -24,6 +25,7 @@ export function BreakScreen(props: {
         <div className="break-actions">
           <button onClick={props.onExtendOne}>再休息 1 分钟</button>
           <button onClick={props.onExtendFive}>再休息 5 分钟</button>
+          <button className="secondary-action" onClick={props.onSnoozeBreak}>10 分钟后再提醒</button>
           <button className="secondary-action" onClick={props.onEndBreak}>结束休息</button>
         </div>
       </div>
