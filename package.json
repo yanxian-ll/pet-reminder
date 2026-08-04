@@ -1,7 +1,7 @@
 {
   "name": "deskpet-rest-reminder",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "description": "Windows 桌宠休息提醒：工作时一个桌宠，休息时满屏桌宠。",
   "scripts": {
