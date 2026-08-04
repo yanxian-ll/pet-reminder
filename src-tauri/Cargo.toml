@@ -1,6 +1,6 @@
 [package]
 name = "deskpet-rest-reminder"
-version = "0.1.0"
+version = "0.1.1"
 description = "Desktop pet rest reminder for Windows and Ubuntu"
 authors = ["yanxian-ll"]
 license = "MIT"
