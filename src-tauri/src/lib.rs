@@ -1,10 +1,20 @@
+use std::{
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
+    time::Duration,
+};
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    AppHandle, Emitter, Manager, Position, Size,
+    AppHandle, Emitter, Manager, Position, Size, State, WindowEvent,
 };
 use tauri_plugin_autostart::MacosLauncher;
 use tauri_plugin_notification::NotificationExt;
+
+#[derive(Clone)]
+struct BreakEnforcement(Arc<AtomicBool>);
 
 #[tauri::command]
 fn show_settings_window(app: AppHandle) -> Result<(), String> {
@@ -16,18 +26,94 @@ fn show_settings_window(app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-#[tauri::command]
-fn fit_main_window_to_current_monitor(app: AppHandle) -> Result<(), String> {
+fn fit_main_window_to_all_monitors_impl(app: &AppHandle) -> Result<(), String> {
     let window = app
         .get_webview_window("main")
         .ok_or_else(|| "main window not found".to_string())?;
-    if let Some(monitor) = window.current_monitor().map_err(|error| error.to_string())? {
-        window
-            .set_position(Position::Physical(*monitor.position()))
-            .map_err(|error| error.to_string())?;
-        window
-            .set_size(Size::Physical(*monitor.size()))
-            .map_err(|error| error.to_string())?;
+    let monitors = window
+        .available_monitors()
+        .map_err(|error| error.to_string())?;
+
+    if monitors.is_empty() {
+        if let Some(monitor) = window.current_monitor().map_err(|error| error.to_string())? {
+            window
+                .set_position(Position::Physical(*monitor.position()))
+                .map_err(|error| error.to_string())?;
+            window
+                .set_size(Size::Physical(*monitor.size()))
+                .map_err(|error| error.to_string())?;
+        }
+        return Ok(());
+    }
+
+    let min_x = monitors
+        .iter()
+        .map(|monitor| monitor.position().x)
+        .min()
+        .unwrap_or(0);
+    let min_y = monitors
+        .iter()
+        .map(|monitor| monitor.position().y)
+        .min()
+        .unwrap_or(0);
+    let max_x = monitors
+        .iter()
+        .map(|monitor| {
+            monitor
+                .position()
+                .x
+                .saturating_add(monitor.size().width.min(i32::MAX as u32) as i32)
+        })
+        .max()
+        .unwrap_or(min_x + 1);
+    let max_y = monitors
+        .iter()
+        .map(|monitor| {
+            monitor
+                .position()
+                .y
+                .saturating_add(monitor.size().height.min(i32::MAX as u32) as i32)
+        })
+        .max()
+        .unwrap_or(min_y + 1);
+
+    let width = max_x.saturating_sub(min_x).max(1) as u32;
+    let height = max_y.saturating_sub(min_y).max(1) as u32;
+
+    window
+        .set_position(Position::Physical((min_x, min_y).into()))
+        .map_err(|error| error.to_string())?;
+    window
+        .set_size(Size::Physical((width, height).into()))
+        .map_err(|error| error.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+fn fit_main_window_to_all_monitors(app: AppHandle) -> Result<(), String> {
+    fit_main_window_to_all_monitors_impl(&app)
+}
+
+fn enforce_break_window(app: &AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.set_ignore_cursor_events(false);
+        let _ = window.set_always_on_top(true);
+        let _ = window.unminimize();
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
+}
+
+#[tauri::command]
+fn set_break_enforcement(
+    app: AppHandle,
+    state: State<'_, BreakEnforcement>,
+    enabled: bool,
+) -> Result<(), String> {
+    state.0.store(enabled, Ordering::SeqCst);
+    if enabled {
+        fit_main_window_to_all_monitors_impl(&app)?;
+        enforce_break_window(&app);
     }
     Ok(())
 }
@@ -142,6 +228,19 @@ pub fn run() {
                     None,
                 ))?;
 
+                let enforcement_flag = Arc::new(AtomicBool::new(false));
+                app.manage(BreakEnforcement(enforcement_flag.clone()));
+                let app_handle = app.handle().clone();
+                std::thread::spawn(move || loop {
+                    if enforcement_flag.load(Ordering::SeqCst) {
+                        let app_for_closure = app_handle.clone();
+                        let _ = app_handle.run_on_main_thread(move || {
+                            enforce_break_window(&app_for_closure);
+                        });
+                    }
+                    std::thread::sleep(Duration::from_millis(300));
+                });
+
                 let break_now = MenuItem::with_id(app, "break-now", "立即休息", true, None::<&str>)?;
                 let pause_toggle = MenuItem::with_id(app, "pause-toggle", "暂停 / 继续", true, None::<&str>)?;
                 let dnd = MenuItem::with_id(app, "dnd-30", "勿扰 30 分钟", true, None::<&str>)?;
@@ -194,9 +293,24 @@ pub fn run() {
 
             Ok(())
         })
+        .on_window_event(|window, event| {
+            if window.label() != "main" {
+                return;
+            }
+            if let WindowEvent::CloseRequested { api, .. } = event {
+                let enforcement = window.app_handle().state::<BreakEnforcement>();
+                if enforcement.0.load(Ordering::SeqCst) {
+                    api.prevent_close();
+                    let _ = window.unminimize();
+                    let _ = window.show();
+                    let _ = window.set_focus();
+                }
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             show_settings_window,
-            fit_main_window_to_current_monitor,
+            fit_main_window_to_all_monitors,
+            set_break_enforcement,
             update_tray_tooltip,
             show_native_notification,
             get_system_idle_seconds
