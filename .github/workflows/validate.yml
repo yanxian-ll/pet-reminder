@@ -38,3 +38,71 @@ jobs:
 
       - name: Check Tauri backend
         run: cargo check --manifest-path src-tauri/Cargo.toml
+
+  build-ubuntu:
+    name: Build Ubuntu 0.1.2 installers
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Ubuntu dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            build-essential \
+            curl \
+            wget \
+            file \
+            libx11-dev \
+            libxdo-dev \
+            libssl-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            patchelf
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Type-check frontend
+        run: npm run typecheck
+
+      - name: Check Ubuntu backend
+        run: cargo check --manifest-path src-tauri/Cargo.toml
+
+      - name: Build Debian and AppImage packages
+        run: npm run tauri:build -- --bundles deb,appimage
+
+      - name: Validate Debian package metadata
+        shell: bash
+        run: |
+          DEB_FILE="$(find src-tauri/target/release/bundle/deb -type f -name '*.deb' -print -quit)"
+          test -n "$DEB_FILE"
+          test "$(dpkg-deb --field "$DEB_FILE" Package)" = "pet-reminder"
+          test "$(dpkg-deb --field "$DEB_FILE" Version)" = "0.1.2"
+          dpkg-deb --info "$DEB_FILE"
+
+      - name: Upload Debian package
+        uses: actions/upload-artifact@v4
+        with:
+          name: ubuntu-x86_64-deb
+          path: src-tauri/target/release/bundle/deb/*.deb
+          if-no-files-found: error
+
+      - name: Upload AppImage package
+        uses: actions/upload-artifact@v4
+        with:
+          name: ubuntu-x86_64-appimage
+          path: src-tauri/target/release/bundle/appimage/*.AppImage
+          if-no-files-found: error
