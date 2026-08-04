@@ -2,14 +2,11 @@ name: Build macOS
 
 on:
   workflow_dispatch:
-  push:
-    tags:
-      - "v*"
 
 jobs:
   build-macos:
     name: Build macOS (${{ matrix.name }})
-    runs-on: macos-latest
+    runs-on: ${{ matrix.os }}
 
     permissions:
       contents: read
@@ -19,9 +16,11 @@ jobs:
       matrix:
         include:
           - name: apple-silicon
+            os: macos-latest
             target: aarch64-apple-darwin
             artifact_name: macos-apple-silicon
           - name: intel
+            os: macos-15-intel
             target: x86_64-apple-darwin
             artifact_name: macos-intel
 
