@@ -5,7 +5,7 @@ on:
   pull_request:
     branches: [main]
   push:
-    branches: [main]
+    branches: [main, 'agent/**']
     tags: ['v*']
 
 jobs:
@@ -68,7 +68,10 @@ jobs:
           DEB_FILE="$(find src-tauri/target/release/bundle/deb -type f -name '*.deb' -print -quit)"
           test -n "$DEB_FILE"
           PACKAGE_NAME="$(dpkg-deb --field "$DEB_FILE" Package)"
+          PACKAGE_VERSION="$(dpkg-deb --field "$DEB_FILE" Version)"
           echo "Debian package name: $PACKAGE_NAME"
+          echo "Debian package version: $PACKAGE_VERSION"
           test "$PACKAGE_NAME" = "pet-reminder"
+          test "$PACKAGE_VERSION" = "0.1.1"
           [[ "$PACKAGE_NAME" =~ ^[a-z0-9][a-z0-9+.-]+$ ]]
           dpkg-deb --info "$DEB_FILE"
