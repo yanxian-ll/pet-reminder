@@ -76,7 +76,46 @@ fn system_idle_seconds() -> u64 {
     current.wrapping_sub(info.dwTime) as u64 / 1000
 }
 
-#[cfg(not(target_os = "windows"))]
+#[cfg(target_os = "linux")]
+fn system_idle_seconds() -> u64 {
+    linux_idle_milliseconds().unwrap_or(0) / 1000
+}
+
+#[cfg(target_os = "linux")]
+fn linux_idle_milliseconds() -> Option<u64> {
+    command_last_number(
+        "gdbus",
+        &[
+            "call",
+            "--session",
+            "--dest",
+            "org.gnome.Mutter.IdleMonitor",
+            "--object-path",
+            "/org/gnome/Mutter/IdleMonitor/Core",
+            "--method",
+            "org.gnome.Mutter.IdleMonitor.GetIdletime",
+        ],
+    )
+    .or_else(|| command_last_number("xprintidle", &[]))
+}
+
+#[cfg(target_os = "linux")]
+fn command_last_number(program: &str, args: &[&str]) -> Option<u64> {
+    use std::process::Command;
+
+    let output = Command::new(program).args(args).output().ok()?;
+    if !output.status.success() {
+        return None;
+    }
+
+    String::from_utf8_lossy(&output.stdout)
+        .split(|character: char| !character.is_ascii_digit())
+        .filter(|part| !part.is_empty())
+        .filter_map(|part| part.parse::<u64>().ok())
+        .last()
+}
+
+#[cfg(not(any(target_os = "windows", target_os = "linux")))]
 fn system_idle_seconds() -> u64 {
     0
 }
