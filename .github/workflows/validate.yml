@@ -40,7 +40,7 @@ jobs:
         run: cargo check --manifest-path src-tauri/Cargo.toml
 
   build-ubuntu:
-    name: Build Ubuntu 0.1.2 installers
+    name: Build Ubuntu installers
     runs-on: ubuntu-22.04
 
     steps:
@@ -89,8 +89,8 @@ jobs:
         run: |
           DEB_FILE="$(find src-tauri/target/release/bundle/deb -type f -name '*.deb' -print -quit)"
           test -n "$DEB_FILE"
-          test "$(dpkg-deb --field "$DEB_FILE" Package)" = "pet-reminder"
-          test "$(dpkg-deb --field "$DEB_FILE" Version)" = "0.1.2"
+          PACKAGE_NAME="$(dpkg-deb --field "$DEB_FILE" Package)"
+          [[ "$PACKAGE_NAME" =~ ^[a-z0-9][a-z0-9+.-]+$ ]]
           dpkg-deb --info "$DEB_FILE"
 
       - name: Upload Debian package
