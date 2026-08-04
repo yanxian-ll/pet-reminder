@@ -119,6 +119,7 @@ fn set_break_enforcement(
         enforce_break_window(&app);
 
         if let Err(error) = strict_input_lock::set_enabled(true) {
+            state.0.store(false, Ordering::SeqCst);
             let _ = app
                 .notification()
                 .builder()
