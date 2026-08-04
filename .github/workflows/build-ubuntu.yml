@@ -36,6 +36,7 @@ jobs:
             curl \
             wget \
             file \
+            libx11-dev \
             libxdo-dev \
             libssl-dev \
             libayatana-appindicator3-dev \
@@ -72,6 +73,6 @@ jobs:
           echo "Debian package name: $PACKAGE_NAME"
           echo "Debian package version: $PACKAGE_VERSION"
           test "$PACKAGE_NAME" = "pet-reminder"
-          test "$PACKAGE_VERSION" = "0.1.1"
+          test "$PACKAGE_VERSION" = "0.1.2"
           [[ "$PACKAGE_NAME" =~ ^[a-z0-9][a-z0-9+.-]+$ ]]
           dpkg-deb --info "$DEB_FILE"
