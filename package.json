@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "Windows 桌宠休息提醒：工作时一个桌宠，休息时满屏桌宠。",
+  "description": "Cross-platform desktop pet rest reminder for Windows and Ubuntu.",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "typecheck": "tsc --noEmit",
