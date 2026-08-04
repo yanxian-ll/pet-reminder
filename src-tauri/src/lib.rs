@@ -1,3 +1,5 @@
+mod strict_input_lock;
+
 use std::{
     sync::{
         atomic::{AtomicBool, Ordering},
@@ -111,10 +113,24 @@ fn set_break_enforcement(
     enabled: bool,
 ) -> Result<(), String> {
     state.0.store(enabled, Ordering::SeqCst);
+
     if enabled {
         fit_main_window_to_all_monitors_impl(&app)?;
         enforce_break_window(&app);
+
+        if let Err(error) = strict_input_lock::set_enabled(true) {
+            let _ = app
+                .notification()
+                .builder()
+                .title("严格休息输入锁未启用")
+                .body(&error)
+                .show();
+            return Err(error);
+        }
+    } else {
+        strict_input_lock::set_enabled(false)?;
     }
+
     Ok(())
 }
 
