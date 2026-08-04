@@ -16,10 +16,10 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
@@ -61,3 +61,14 @@ jobs:
           releaseBody: Ubuntu packages include a Debian installer and an AppImage.
           releaseDraft: false
           prerelease: false
+
+      - name: Validate Debian package metadata
+        shell: bash
+        run: |
+          DEB_FILE="$(find src-tauri/target/release/bundle/deb -type f -name '*.deb' -print -quit)"
+          test -n "$DEB_FILE"
+          PACKAGE_NAME="$(dpkg-deb --field "$DEB_FILE" Package)"
+          echo "Debian package name: $PACKAGE_NAME"
+          test "$PACKAGE_NAME" = "pet-reminder"
+          [[ "$PACKAGE_NAME" =~ ^[a-z0-9][a-z0-9+.-]+$ ]]
+          dpkg-deb --info "$DEB_FILE"
