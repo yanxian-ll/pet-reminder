@@ -6,13 +6,10 @@ on:
     branches: [main]
   push:
     branches: [main, 'agent/**']
-    tags: ['v*']
 
 jobs:
   build-ubuntu:
     runs-on: ubuntu-22.04
-    permissions:
-      contents: write
 
     steps:
       - name: Check out repository
@@ -50,17 +47,10 @@ jobs:
 
       - name: Build deb and AppImage packages
         uses: tauri-apps/tauri-action@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           args: --bundles deb,appimage
           uploadWorkflowArtifacts: true
           workflowArtifactNamePattern: ubuntu-x86_64-[bundle]
-          tagName: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || '' }}
-          releaseName: ${{ startsWith(github.ref, 'refs/tags/') && format('Pet Reminder {0}', github.ref_name) || '' }}
-          releaseBody: Ubuntu packages include a Debian installer and an AppImage.
-          releaseDraft: false
-          prerelease: false
 
       - name: Validate Debian package metadata
         shell: bash
