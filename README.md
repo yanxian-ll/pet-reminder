@@ -1,10 +1,10 @@
 # 🐾 桌宠提醒休息 / Pet Reminder
 
-一个用 **Tauri 2 + React 19 + TypeScript + Vite** 构建的桌面休息提醒应用。
+一个用 **Tauri 2 + React 19 + TypeScript + Vite** 构建的跨平台桌面休息提醒应用，支持 Windows、macOS 和 Ubuntu。
 
 工作时，一只小桌宠陪在屏幕边缘并显示下一次休息倒计时；休息时，应用切换为全屏桌宠覆盖层，提醒你离开屏幕、活动身体、看看远处。
 
-> 当前版本：**v0.2.0**
+> 当前版本：**v0.2.1**
 
 [![Release](https://img.shields.io/github/v/release/yanxian-ll/pet-reminder)](https://github.com/yanxian-ll/pet-reminder/releases/latest)
 [![License](https://img.shields.io/github/license/yanxian-ll/pet-reminder)](LICENSE)
@@ -17,13 +17,13 @@
 
 👉 **[下载最新版本](https://github.com/yanxian-ll/pet-reminder/releases/latest)**
 
-v0.2.0 提供：
+v0.2.1 支持：
 
-- **Windows x64**：`deskpet-rest-reminder_windows_x64.exe`
-- **macOS Apple Silicon**：`deskpet-rest-reminder_aarch64.dmg`
-- **macOS Intel**：`deskpet-rest-reminder_x64.dmg`
+- **Windows x64**：NSIS 安装包
+- **macOS Apple Silicon / Intel**：DMG
+- **Ubuntu x86-64**：`.deb` 和 `.AppImage`
 
-> Windows 是主要开发与完整功能平台。macOS 可构建与使用主要提醒功能，但“检测系统空闲时间并自动重置专注计时”目前仅在 Windows 实现。
+> Ubuntu 的严格输入阻止依赖 X11 全局输入抓取。需要完整严格锁定时，请在登录界面选择 **Ubuntu on Xorg**。Wayland 会限制普通应用对系统级键鼠输入的拦截。
 
 ## ✨ 功能
 
@@ -38,6 +38,7 @@ v0.2.0 提供：
   - 播放休息提示音并发送系统通知
   - 休息时间结束后自动恢复工作模式
   - 休息期间仅支持延长 1 分钟或 5 分钟
+  - Ubuntu Xorg 下可启用严格键盘/鼠标输入锁
 
 - ⏰ **专注与休息节奏**
   - 默认：工作 20 分钟 / 休息 2 分钟
@@ -52,7 +53,8 @@ v0.2.0 提供：
   - 勿扰或休息期间触发的提醒会排队处理
 
 - 💤 **自然休息检测**
-  - Windows 下可检测系统空闲时间
+  - Windows 使用 `GetLastInputInfo`
+  - Ubuntu 优先使用 GNOME Mutter IdleMonitor，并以 `xprintidle` 作为回退
   - 默认离开电脑 3 分钟后视为已自然休息
   - 自动重新开始专注计时
 
@@ -106,12 +108,14 @@ v0.2.0 提供：
 - Tauri Autostart Plugin
 - Tauri Notification Plugin
 - Windows `GetLastInputInfo` 空闲时间检测
+- Linux GNOME Mutter IdleMonitor / `xprintidle` 空闲时间检测
+- Ubuntu Xorg 严格输入抓取
 
 ## 本地开发
 
 ### 1. 准备环境
 
-需要：
+通用依赖：
 
 - Git
 - Node.js 22 / LTS
@@ -122,6 +126,29 @@ Windows 还需要：
 
 - Microsoft Visual C++ Build Tools
 - Microsoft Edge WebView2 Runtime
+
+Ubuntu 22.04 / 24.04 可安装：
+
+```bash
+sudo apt update
+sudo apt install -y \
+  libwebkit2gtk-4.1-dev \
+  build-essential \
+  curl \
+  wget \
+  file \
+  libxdo-dev \
+  libssl-dev \
+  libayatana-appindicator3-dev \
+  librsvg2-dev \
+  patchelf
+```
+
+如果当前桌面环境不能通过 GNOME IdleMonitor 提供空闲时间，可额外安装：
+
+```bash
+sudo apt install -y xprintidle
+```
 
 可参考 Tauri 官方 prerequisites：
 
@@ -154,6 +181,18 @@ npm run typecheck
 npm run build
 ```
 
+### Ubuntu Wayland / XWayland
+
+Ubuntu 通常默认使用 Wayland。桌面环境可能限制原生 Wayland 应用精确设置窗口位置和置顶状态；应用会在可用时使用 XWayland 以改善桌宠定位与覆盖层行为。
+
+如要测试原生 Wayland 后端，可显式运行：
+
+```bash
+GDK_BACKEND=wayland npm run tauri:dev
+```
+
+需要严格阻止键盘、鼠标和 Alt+Tab 等桌面操作时，请使用 **Ubuntu on Xorg** 会话。
+
 ## 构建桌面应用
 
 ### Windows
@@ -178,9 +217,38 @@ npm run tauri:build -- --bundles app,dmg
 
 也可以在 GitHub Actions 中手动运行 **Build macOS** 工作流，分别生成 Apple Silicon 与 Intel 构建。
 
+### Ubuntu
+
+```bash
+npm ci
+npm run tauri:build -- --bundles deb,appimage
+```
+
+构建产物通常位于：
+
+```text
+src-tauri/target/release/bundle/deb/
+src-tauri/target/release/bundle/appimage/
+```
+
+安装 Debian 包：
+
+```bash
+sudo apt install ./src-tauri/target/release/bundle/deb/*.deb
+```
+
+或运行 AppImage：
+
+```bash
+chmod +x src-tauri/target/release/bundle/appimage/*.AppImage
+./src-tauri/target/release/bundle/appimage/*.AppImage
+```
+
+仓库中的 **Build Ubuntu packages** GitHub Actions 工作流也会生成 `.deb` 和 `.AppImage` 构建产物。
+
 ## 发布
 
-仓库已经配置 GitHub Actions 自动发布流程。
+仓库已经配置 GitHub Actions 自动构建/发布流程。
 
 推送 `v*` 标签，例如：
 
@@ -189,13 +257,12 @@ git tag v0.2.1
 git push origin v0.2.1
 ```
 
-Release workflow 会自动构建：
+发布流程可构建：
 
 - Windows x64 NSIS 安装包
 - macOS Apple Silicon DMG
 - macOS Intel DMG
-
-并创建对应的 GitHub Release。
+- Ubuntu x86-64 Debian 包和 AppImage
 
 ## 更新本地代码
 
@@ -217,6 +284,29 @@ npm run tauri:dev
 ```
 
 ## 常见问题
+
+### Ubuntu 托盘图标不显示
+
+确认已安装 `libayatana-appindicator3-1`，且桌面环境支持 AppIndicator。GNOME 可能需要 AppIndicator/KStatusNotifierItem 扩展。
+
+### Ubuntu 桌宠无法精确定位
+
+检查 XWayland 是否可用以及 `DISPLAY` 是否设置：
+
+```bash
+echo "$XDG_SESSION_TYPE"
+echo "$DISPLAY"
+```
+
+如果需要精确桌宠定位和严格输入锁，不要强制设置 `GDK_BACKEND=wayland`。
+
+### Ubuntu 自然休息检测始终为 0
+
+GNOME 下确认 `gdbus` 可用；其他 X11 桌面可安装：
+
+```bash
+sudo apt install -y libglib2.0-bin xprintidle
+```
 
 ### Windows 下 `rustc` 或 `cargo` 找不到
 
@@ -250,7 +340,11 @@ Desktop development with C++
 
 休息覆盖层的设计目标是减少“顺手跳过休息”的诱惑，因此不会提供立即结束休息或延后本次休息的按钮。
 
+Ubuntu Xorg 下，严格模式还能抓取全局键盘和鼠标输入，以阻止普通点击、输入、Alt+Tab 和工作区切换。Wayland 不允许普通应用可靠执行同等级别的系统级输入拦截。
+
 如果确实需要紧急退出，可以通过系统托盘选择 **退出**。
+
+更多 Ubuntu 严格锁定说明见 [`UBUNTU_STRICT_BREAK.md`](UBUNTU_STRICT_BREAK.md)。
 
 ## 项目结构
 
@@ -265,8 +359,11 @@ pet-reminder/
 │  └─ components/
 ├─ src-tauri/
 │  ├─ src/lib.rs              # 托盘、通知、空闲检测等原生能力
+│  ├─ src/strict_input_lock.rs# Ubuntu Xorg 严格输入锁
+│  ├─ linux/                  # Linux desktop 集成
+│  ├─ tauri.linux.conf.json   # Linux Tauri 配置
 │  └─ tauri.conf.json
-├─ .github/workflows/         # CI / Windows / macOS / Release
+├─ .github/workflows/         # CI / Windows / macOS / Ubuntu / Release
 └─ package.json
 ```
 
