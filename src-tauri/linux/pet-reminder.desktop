@@ -1,0 +1,10 @@
+[Desktop Entry]
+Categories={{categories}}
+Comment=桌宠休息提醒
+Exec={{exec}}
+StartupWMClass=deskpet-rest-reminder
+Icon={{icon}}
+Name=桌宠提醒休息
+Name[zh_CN]=桌宠提醒休息
+Terminal=false
+Type=Application
